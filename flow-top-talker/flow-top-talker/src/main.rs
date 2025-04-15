@@ -32,7 +32,18 @@ async fn main() -> anyhow::Result<()> {
     }
     let program: &mut KProbe = ebpf.program_mut("flow_top_talker").unwrap().try_into()?;
     program.load()?;
-    program.attach("tcp_sendmsg", 0)?;
+    
+    // TCP sendmsg kprobe.
+    // program.attach("tcp_sendmsg", 0)?;
+
+    // TCP recvmsg kprobe.
+    // program.attach("tcp_recvmsg", 0)?;
+
+    // UDP sendmsg kprobe.
+    // program.attach("udp_sendmsg", 0)?;
+
+    // UDP recvmsg kprobe.
+    program.attach("udp_recvmsg", 0)?;
 
     let ctrl_c = signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
