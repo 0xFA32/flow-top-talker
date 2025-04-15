@@ -9,9 +9,17 @@
 
 mod bindings;
 
-use aya_ebpf::{macros::kprobe, programs::ProbeContext};
+use aya_ebpf::{
+    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_kernel}, macros::kprobe, programs::ProbeContext
+};
 use aya_log_ebpf::info;
 use bindings::*;
+use flow_top_talker_common::common_types::FlowKey;
+
+// IpV4 and IpV6.
+const AF_INET: u16 = 2;
+const AF_INET6: u16 = 10;
+
 
 #[kprobe]
 pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
@@ -22,8 +30,18 @@ pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    let sock: *mut sock = ctx.arg(0).ok_or(1u32)?;
-    info!(&ctx, "tcp_sendmsg kprobe called");
+    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 0) {
+        info!(
+            &ctx,
+            "tcp_sendmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flow_key.src_addr,
+            flow_key.src_port,
+            flow_key.dest_addr,
+            flow_key.dest_port,
+            size,
+        );
+    }
+
     Ok(0)
 }
 
@@ -36,7 +54,18 @@ pub fn tcp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    info!(&ctx, "tcp_recvmsg kprobe called");
+    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 0) {
+        info!(
+            &ctx,
+            "tcp_recvmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flow_key.src_addr,
+            flow_key.src_port,
+            flow_key.dest_addr,
+            flow_key.dest_port,
+            size,
+        );
+    }
+
     Ok(0)
 }
 
@@ -49,7 +78,18 @@ pub fn udp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_udp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    info!(&ctx, "udp_sendmsg kprobe called");
+    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 1) {
+        info!(
+            &ctx,
+            "udp_sendmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flow_key.src_addr,
+            flow_key.src_port,
+            flow_key.dest_addr,
+            flow_key.dest_port,
+            size,
+        );
+    }
+
     Ok(0)
 }
 
@@ -62,8 +102,62 @@ pub fn udp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    info!(&ctx, "udp_recvmsg kprobe called");
+    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 1) {
+        info!(
+            &ctx,
+            "udp_recvmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flow_key.src_addr,
+            flow_key.src_port,
+            flow_key.dest_addr,
+            flow_key.dest_port,
+            size,
+        );
+    }
+
     Ok(0)
+}
+
+fn unwrap_flow_info(ctx: &ProbeContext, prot: u8) -> Option<(FlowKey, usize)> {
+    let sock: *mut sock = ctx.arg(0)?;
+    let len: usize = ctx.arg(2)?;
+    let sk_common = unsafe {
+        bpf_probe_read_kernel(&(*sock).__sk_common as *const sock_common).ok()?
+    };
+    let pid_tgid = bpf_get_current_pid_tgid();
+
+    match sk_common.skc_family {
+        AF_INET6 => {
+            // Skipping handling Ipv6 traffic for now. 
+            return None;
+        },
+        AF_INET => {
+
+            // Network stores in big endian. Not sure which values in kernel are defined as
+            // big endian or native endian. So converting all of them as it would be no-op 
+            // if it is already big endian.
+            let src_addr = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_rcv_saddr
+            });
+
+            let dest_addr = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_daddr
+            });
+
+            let src_port = u16::from_be(unsafe {
+                sk_common.__bindgen_anon_3.__bindgen_anon_1.skc_num
+            });
+
+            let dest_port = u16::from_be(unsafe {
+                sk_common.__bindgen_anon_3.__bindgen_anon_1.skc_dport
+            });
+
+            let flow_key = FlowKey::new(src_addr, dest_addr, src_port, dest_port, prot);
+            return Some((flow_key, len));
+        },
+        _ => {
+            return None;
+        }
+    }
 }
 
 #[cfg(not(test))]
