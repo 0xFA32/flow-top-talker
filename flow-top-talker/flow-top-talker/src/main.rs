@@ -1,4 +1,4 @@
-use aya::programs::KProbe;
+use aya::{programs::KProbe, Ebpf};
 #[rustfmt::skip]
 use log::{debug, warn};
 use tokio::signal;
@@ -30,25 +30,26 @@ async fn main() -> anyhow::Result<()> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-    let program: &mut KProbe = ebpf.program_mut("flow_top_talker").unwrap().try_into()?;
-    program.load()?;
-    
-    // TCP sendmsg kprobe.
-    // program.attach("tcp_sendmsg", 0)?;
 
-    // TCP recvmsg kprobe.
-    // program.attach("tcp_recvmsg", 0)?;
-
-    // UDP sendmsg kprobe.
-    // program.attach("udp_sendmsg", 0)?;
-
-    // UDP recvmsg kprobe.
-    program.attach("udp_recvmsg", 0)?;
+    attach_to_beginning(&mut ebpf, "tcp_sendmsg_kprobe", "tcp_sendmsg")?;
+    attach_to_beginning(&mut ebpf, "tcp_recvmsg_kprobe", "tcp_recvmsg")?;
+    attach_to_beginning(&mut ebpf, "udp_sendmsg_kprobe", "udp_sendmsg")?;
+    attach_to_beginning(&mut ebpf, "udp_recvmsg_kprobe", "udp_recvmsg")?;
 
     let ctrl_c = signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
     ctrl_c.await?;
     println!("Exiting...");
+
+    Ok(())
+}
+
+// Attach to the beginning of the kernel function mentioned via kprobe_name.
+fn attach_to_beginning(ebpf: &mut Ebpf, program_name: &str, kprobe_name: &str) -> anyhow::Result<()> {
+    let program: &mut KProbe = ebpf.program_mut(program_name).unwrap().try_into()?;
+    program.load()?;
+
+    program.attach(kprobe_name, 0)?;
 
     Ok(())
 }
