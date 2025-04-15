@@ -1,8 +1,17 @@
 #![no_std]
 #![no_main]
 
+// Allow following cases for bindings.
+#[allow(non_upper_case_globals)]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+#[allow(dead_code)]
+
+mod bindings;
+
 use aya_ebpf::{macros::kprobe, programs::ProbeContext};
 use aya_log_ebpf::info;
+use bindings::*;
 
 #[kprobe]
 pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
@@ -13,6 +22,7 @@ pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
+    let sock: *mut sock = ctx.arg(0).ok_or(1u32)?;
     info!(&ctx, "tcp_sendmsg kprobe called");
     Ok(0)
 }
