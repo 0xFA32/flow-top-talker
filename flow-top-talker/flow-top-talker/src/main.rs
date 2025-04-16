@@ -114,6 +114,7 @@ fn fetch_latest_data(
                             if heap.len() == MAX_SIZE {
                                 let lowest_flow = heap.peek().unwrap();
                                 if lowest_flow.throughput < cur_throughput {
+                                    heap.pop();
                                     heap.push(FlowInfo {
                                         src_addr: flow_key.src_addr,
                                         dest_addr: flow_key.dest_addr,
