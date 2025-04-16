@@ -7,7 +7,14 @@ use std::{
 };
 
 use aya::{maps::{Array, HashMap, MapData, MapError}, programs::KProbe, Ebpf};
-use flow_top_talker_common::common_types::FlowKey;
+use flow_top_talker_common::common_types::{
+    FlowKey,
+    INGRESS_TRACKER_0_MAP_NAME,
+    INGRESS_TRACKER_1_MAP_NAME,
+    EGRESS_TRACKER_0_MAP_NAME,
+    EGRESS_TRACKER_1_MAP_NAME,
+    FLAG_MAP_NAME,
+};
 #[rustfmt::skip]
 use log::{debug, warn};
 
@@ -53,19 +60,19 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         sleep(Duration::from_secs(1));
-        match ebpf.map_mut("FLAG") {
+        match ebpf.map_mut(FLAG_MAP_NAME) {
             Some(map) => {
                 let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
                 let flag = array.get(&0, 0).unwrap();
 
                 if flag == 0 {
                     let _ = array.set(0, 1, 0);
-                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_0", &mut heap);
-                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_0", &mut heap);
+                    fetch_latest_data(&mut ebpf, INGRESS_TRACKER_0_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, EGRESS_TRACKER_0_MAP_NAME, &mut heap);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_1", &mut heap);
-                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_1", &mut heap);
+                    fetch_latest_data(&mut ebpf, INGRESS_TRACKER_1_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, EGRESS_TRACKER_1_MAP_NAME, &mut heap);
                 }
             },
             None => { continue }

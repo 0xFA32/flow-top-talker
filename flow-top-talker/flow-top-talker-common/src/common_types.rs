@@ -1,3 +1,12 @@
+/// Common types used in both ebpf and user space application.
+
+pub static INGRESS_TRACKER_0_MAP_NAME: &str = "INGRESS_TRACKER_0";
+pub static INGRESS_TRACKER_1_MAP_NAME: &str = "INGRESS_TRACKER_1";
+pub static EGRESS_TRACKER_0_MAP_NAME: &str = "EGRESS_TRACKER_0";
+pub static EGRESS_TRACKER_1_MAP_NAME: &str = "INGRESS_TRACKER_1";
+pub static FLAG_MAP_NAME: &str = "FLAG";
+
+
 /// Struct defining the key for each flow by 5-tuple.
 /// 
 /// TODO: Add padding to make it cache friendly.
