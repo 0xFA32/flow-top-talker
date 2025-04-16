@@ -1,5 +1,6 @@
 /// Struct defining the key for each flow by 5-tuple.
 /// 
+/// TODO: Add padding to make it cache friendly.
 
 #[repr(C)]
 #[repr(align(64))]

@@ -171,6 +171,14 @@ fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
     Ok(0)
 }
 
+/// Unwrap flow info from TCP/UDP send and recv msg. In all of the APIs the 3rd parameter
+/// denotes the size.
+/// 
+/// tcp_sendmsg: https://github.com/torvalds/linux/blob/1a1d569a75f3ab2923cb62daf356d102e4df2b86/net/ipv4/tcp.c#L1361
+/// tcp_recvmsg: https://github.com/torvalds/linux/blob/1a1d569a75f3ab2923cb62daf356d102e4df2b86/net/ipv4/tcp.c#L2863
+/// 
+/// udp_sendmsg: https://github.com/torvalds/linux/blob/1a1d569a75f3ab2923cb62daf356d102e4df2b86/net/ipv4/udp.c#L1270
+/// udp_recvmsg: https://github.com/torvalds/linux/blob/1a1d569a75f3ab2923cb62daf356d102e4df2b86/net/ipv4/udp.c#L2025
 fn unwrap_flow_info(ctx: &ProbeContext, prot: u8) -> Option<(FlowKey, usize)> {
     let sock: *mut sock = ctx.arg(0)?;
     let len: usize = ctx.arg(2)?;
