@@ -3,6 +3,7 @@
 
 #[repr(C)]
 #[repr(align(64))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FlowKey {
     pub src_addr: u32,
     pub dest_addr: u32,
@@ -28,3 +29,6 @@ impl FlowKey {
         }
     }
 }
+
+#[cfg(feature = "with-aya")]
+unsafe impl aya::Pod for FlowKey {}

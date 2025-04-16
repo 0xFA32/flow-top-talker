@@ -1,9 +1,9 @@
 use std::{thread::sleep, time::Duration};
 
-use aya::{maps::Array, programs::KProbe, Ebpf};
+use aya::{maps::{Array, HashMap, MapData}, programs::KProbe, Ebpf};
+use flow_top_talker_common::common_types::FlowKey;
 #[rustfmt::skip]
 use log::{debug, warn};
-use tokio::signal;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,25 +47,30 @@ async fn main() -> anyhow::Result<()> {
 
                 println!("Resetting the flag..");
                 if flag == 0 {
-                    array.set(0, 1, 0);
+                    let _ = array.set(0, 1, 0);
+                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_0");
+                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_0");
                 } else {
-                    array.set(0, 0, 0);
+                    let _ = array.set(0, 0, 0);
+                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_1");
+                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_1");
                 }
             },
             None => { continue }
         };
     }
 
-    let ctrl_c = signal::ctrl_c();
-    println!("Waiting for Ctrl-C...");
-    ctrl_c.await?;
-    println!("Exiting...");
-
     Ok(())
 }
 
 fn fetch_latest_data(ebpf: &mut Ebpf, map_name: &str) {
-
+    match ebpf.map_mut(map_name) {
+        Some(map) => {
+            
+            let mut map_data: HashMap<&mut MapData, FlowKey, u64> = HashMap::try_from(map).unwrap();
+        },
+        None => { return; }
+    }
 }
 
 // Attach to the beginning of the kernel function mentioned via kprobe_name.

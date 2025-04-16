@@ -6,7 +6,7 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-flow-top-talker-common = { path = "../flow-top-talker-common", features = ["user"] }
+flow-top-talker-common = { path = "../flow-top-talker-common", features = ["with-aya"] }
 
 anyhow = { workspace = true, default-features = true }
 aya = { workspace = true }

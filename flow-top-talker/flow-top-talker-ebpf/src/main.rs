@@ -28,16 +28,16 @@ const AF_INET6: u16 = 10;
 /// 
 /// Based on the flag value set choose the appropriate map. This is an easy to way to clear
 /// the map by the user program while the ebpf program continues to track the throughput.
-#[map]
+#[map(name = "INGRESS_TRACKER_0")]
 static INGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
 
-#[map]
+#[map(name = "INGRESS_TRACKER_1")]
 static INGRESS_TRACKER_1: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
 
-#[map]
+#[map(name = "EGRESS_TRACKER_0")]
 static EGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
 
-#[map]
+#[map(name = "EGRESS_TRACKER_1")]
 static EGRESS_TRACKER_1: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
 
 // Flag use to reset between the 2 tracker.

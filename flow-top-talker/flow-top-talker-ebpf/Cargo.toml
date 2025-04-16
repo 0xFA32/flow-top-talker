@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-flow-top-talker-common = { path = "../flow-top-talker-common" }
+flow-top-talker-common = { path = "../flow-top-talker-common", default-features = false }
 
 aya-ebpf = { workspace = true }
 aya-log-ebpf = { workspace = true }
