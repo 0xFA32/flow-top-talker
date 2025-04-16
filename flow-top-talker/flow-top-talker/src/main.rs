@@ -1,4 +1,6 @@
-use aya::{programs::KProbe, Ebpf};
+use std::{thread::sleep, time::Duration};
+
+use aya::{maps::Array, programs::KProbe, Ebpf};
 #[rustfmt::skip]
 use log::{debug, warn};
 use tokio::signal;
@@ -36,12 +38,34 @@ async fn main() -> anyhow::Result<()> {
     attach_to_beginning(&mut ebpf, "udp_sendmsg_kprobe", "udp_sendmsg")?;
     attach_to_beginning(&mut ebpf, "udp_recvmsg_kprobe", "udp_recvmsg")?;
 
+    loop {
+        sleep(Duration::from_secs(10));
+        match ebpf.map_mut("FLAG") {
+            Some(map) => {
+                let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
+                let flag = array.get(&0, 0).unwrap();
+
+                println!("Resetting the flag..");
+                if flag == 0 {
+                    array.set(0, 1, 0);
+                } else {
+                    array.set(0, 0, 0);
+                }
+            },
+            None => { continue }
+        };
+    }
+
     let ctrl_c = signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
     ctrl_c.await?;
     println!("Exiting...");
 
     Ok(())
+}
+
+fn fetch_latest_data(ebpf: &mut Ebpf, map_name: &str) {
+
 }
 
 // Attach to the beginning of the kernel function mentioned via kprobe_name.

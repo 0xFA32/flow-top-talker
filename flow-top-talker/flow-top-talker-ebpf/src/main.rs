@@ -10,8 +10,12 @@
 mod bindings;
 
 use aya_ebpf::{
-    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_kernel}, macros::kprobe, programs::ProbeContext
+    helpers::{bpf_get_current_pid_tgid, bpf_probe_read_kernel},
+    macros::{kprobe, map},
+    programs::ProbeContext,
+    maps::{Array, HashMap}
 };
+
 use aya_log_ebpf::info;
 use bindings::*;
 use flow_top_talker_common::common_types::FlowKey;
@@ -20,6 +24,25 @@ use flow_top_talker_common::common_types::FlowKey;
 const AF_INET: u16 = 2;
 const AF_INET6: u16 = 10;
 
+/// Maintain 2 sets of maps to track the current throughput for ingress and egress.
+/// 
+/// Based on the flag value set choose the appropriate map. This is an easy to way to clear
+/// the map by the user program while the ebpf program continues to track the throughput.
+#[map]
+static INGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+
+#[map]
+static INGRESS_TRACKER_1: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+
+#[map]
+static EGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+
+#[map]
+static EGRESS_TRACKER_1: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+
+// Flag use to reset between the 2 tracker.
+#[map(name = "FLAG")]
+static FLAG: Array<u32> = Array::with_max_entries(1, 0);
 
 #[kprobe]
 pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
@@ -31,9 +54,27 @@ pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 
 fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
     if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 0) {
+        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
+        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
+
+        let tracker = if flag == 0 {
+            &EGRESS_TRACKER_0
+        } else {
+            &EGRESS_TRACKER_1
+        };
+
+        match tracker.get_ptr_mut(&flow_key) {
+            Some(val) => unsafe {
+                *val += size as u64;
+            },
+            None => {
+                let _ = tracker.insert(&flow_key, &(size as u64), 0);
+            }
+        };
         info!(
             &ctx,
-            "tcp_sendmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            "tcp_sendmsg flag = {}, src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flag,
             flow_key.src_addr,
             flow_key.src_port,
             flow_key.dest_addr,
@@ -55,9 +96,28 @@ pub fn tcp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 
 fn try_tcp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
     if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 0) {
+        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
+        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
+
+        let tracker = if flag == 0 {
+            &INGRESS_TRACKER_0
+        } else {
+            &INGRESS_TRACKER_1
+        };
+
+        match tracker.get_ptr_mut(&flow_key) {
+            Some(val) => unsafe {
+                *val += size as u64;
+            },
+            None => {
+                let _ = tracker.insert(&flow_key, &(size as u64), 0);
+            }
+        };
+
         info!(
             &ctx,
-            "tcp_recvmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            "tcp_recvmsg flag = {} src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flag,
             flow_key.src_addr,
             flow_key.src_port,
             flow_key.dest_addr,
@@ -79,9 +139,28 @@ pub fn udp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 
 fn try_udp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
     if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 1) {
+        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
+        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
+
+        let tracker = if flag == 0 {
+            &EGRESS_TRACKER_0
+        } else {
+            &EGRESS_TRACKER_1
+        };
+
+        match tracker.get_ptr_mut(&flow_key) {
+            Some(val) => unsafe {
+                *val += size as u64;
+            },
+            None => {
+                let _ = tracker.insert(&flow_key, &(size as u64), 0);
+            }
+        };
+
         info!(
             &ctx,
-            "udp_sendmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            "udp_sendmsg flag = {}, src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flag,
             flow_key.src_addr,
             flow_key.src_port,
             flow_key.dest_addr,
@@ -103,9 +182,27 @@ pub fn udp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 
 fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
     if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 1) {
+        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
+        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
+
+        let tracker = if flag == 0 {
+            &INGRESS_TRACKER_0
+        } else {
+            &INGRESS_TRACKER_1
+        };
+
+        match tracker.get_ptr_mut(&flow_key) {
+            Some(val) => unsafe {
+                *val += size as u64;
+            },
+            None => {
+                let _ = tracker.insert(&flow_key, &(size as u64), 0);
+            }
+        };
         info!(
             &ctx,
-            "udp_recvmsg src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            "udp_recvmsg flag = {}, src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
+            flag,
             flow_key.src_addr,
             flow_key.src_port,
             flow_key.dest_addr,
