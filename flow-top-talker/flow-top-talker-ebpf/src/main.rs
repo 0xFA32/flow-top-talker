@@ -27,6 +27,8 @@ const AF_INET6: u16 = 10;
 /// 
 /// Based on the flag value set choose the appropriate map. This is an easy to way to clear
 /// the map by the user program while the ebpf program continues to track the throughput.
+/// 
+/// TODO: use per-cpu hash map and aggregate in user-space.
 #[map(name = "INGRESS_TRACKER_0")]
 static INGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
 
