@@ -32,3 +32,7 @@ Use latest rustup.
 
 ```cargo generate --name flow-top-talker -d program_type=xdp https://github.com/aya-rs/aya-template```
 
+### Running it locally
+
+1. cargo build
+2. cargo run --config 'target."cfg(all())".runner="sudo -E"' 
