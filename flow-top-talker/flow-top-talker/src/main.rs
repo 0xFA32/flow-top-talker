@@ -1,9 +1,20 @@
-use std::{thread::sleep, time::Duration};
+use std::{
+    collections::BinaryHeap,
+    hash::Hash,
+    thread::sleep,
+    time::Duration,
+    net::Ipv4Addr,
+};
 
-use aya::{maps::{Array, HashMap, MapData}, programs::KProbe, Ebpf};
+use aya::{maps::{Array, HashMap, MapData, MapError}, programs::KProbe, Ebpf};
 use flow_top_talker_common::common_types::FlowKey;
 #[rustfmt::skip]
 use log::{debug, warn};
+
+// TODO: Take this as input.
+const MAX_SIZE: usize = 10;
+
+const BYTES_TO_MB: u64 = 1024 * 1024;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -38,36 +49,92 @@ async fn main() -> anyhow::Result<()> {
     attach_to_beginning(&mut ebpf, "udp_sendmsg_kprobe", "udp_sendmsg")?;
     attach_to_beginning(&mut ebpf, "udp_recvmsg_kprobe", "udp_recvmsg")?;
 
+    let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+
     loop {
-        sleep(Duration::from_secs(10));
+        sleep(Duration::from_secs(1));
         match ebpf.map_mut("FLAG") {
             Some(map) => {
                 let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
                 let flag = array.get(&0, 0).unwrap();
 
-                println!("Resetting the flag..");
                 if flag == 0 {
                     let _ = array.set(0, 1, 0);
-                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_0");
-                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_0");
+                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_0", &mut heap);
+                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_0", &mut heap);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_1");
-                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_1");
+                    fetch_latest_data(&mut ebpf, "INGRESS_TRACKER_1", &mut heap);
+                    fetch_latest_data(&mut ebpf, "EGRESS_TRACKER_1", &mut heap);
                 }
             },
             None => { continue }
         };
+
+        println!("--------------Printing Flow info--------------------");
+        for flow_info in heap.iter() {
+            println!("{:?}:{} --> {:?}:{}  [{} Bps]",
+                Ipv4Addr::from(flow_info.src_addr),
+                flow_info.src_port,
+                Ipv4Addr::from(flow_info.dest_addr),
+                flow_info.dest_port,
+                flow_info.throughput,
+            );
+        }
+        println!("--------------Done printing Flow info--------------------");
+
+        heap.clear();
     }
 
     Ok(())
 }
 
-fn fetch_latest_data(ebpf: &mut Ebpf, map_name: &str) {
+fn fetch_latest_data(
+    ebpf: &mut Ebpf,
+    map_name: &str, 
+    heap: &mut BinaryHeap<FlowInfo>,
+) {
     match ebpf.map_mut(map_name) {
         Some(map) => {
-            
-            let mut map_data: HashMap<&mut MapData, FlowKey, u64> = HashMap::try_from(map).unwrap();
+            let mut map_data: HashMap<&mut MapData, FlowKey, u64> =
+                HashMap::try_from(map).unwrap();
+            let keys: Vec<Result<FlowKey, MapError>> = map_data.keys().collect();
+            for key in keys {
+                if let Ok(flow_key) = key {
+                    match map_data.get(&flow_key, 0) {
+                        Ok(cur_throughput) => {
+
+                            if heap.len() == MAX_SIZE {
+                                let lowest_flow = heap.peek().unwrap();
+                                if lowest_flow.throughput < cur_throughput {
+                                    heap.push(FlowInfo {
+                                        src_addr: flow_key.src_addr,
+                                        dest_addr: flow_key.dest_addr,
+                                        src_port: flow_key.src_port,
+                                        dest_port: flow_key.dest_port,
+                                        throughput: cur_throughput,
+                                    });
+                                }
+                            } else {
+                                heap.push(FlowInfo {
+                                    src_addr: flow_key.src_addr,
+                                    dest_addr: flow_key.dest_addr,
+                                    src_port: flow_key.src_port,
+                                    dest_port: flow_key.dest_port,
+                                    throughput: cur_throughput,
+                                });                                
+                            }
+
+
+                        },
+                        _ => {}
+                    }
+
+                    if let Err(_) = map_data.remove(&flow_key) {
+                        eprintln!("Error removing data from map...");
+                    }
+                }
+            }
         },
         None => { return; }
     }
@@ -81,4 +148,25 @@ fn attach_to_beginning(ebpf: &mut Ebpf, program_name: &str, kprobe_name: &str) -
     program.attach(kprobe_name, 0)?;
 
     Ok(())
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct FlowInfo {
+    src_addr: u32,
+    dest_addr: u32,
+    src_port: u16,
+    dest_port: u16,
+    throughput: u64,
+}
+
+impl PartialOrd for FlowInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        other.throughput.partial_cmp(&self.throughput)
+    }
+}
+
+impl Ord for FlowInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+       other.throughput.cmp(&self.throughput)
+    }
 }

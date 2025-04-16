@@ -16,7 +16,6 @@ use aya_ebpf::{
     maps::{Array, HashMap}
 };
 
-use aya_log_ebpf::info;
 use bindings::*;
 use flow_top_talker_common::common_types::FlowKey;
 
@@ -71,16 +70,6 @@ fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
                 let _ = tracker.insert(&flow_key, &(size as u64), 0);
             }
         };
-        info!(
-            &ctx,
-            "tcp_sendmsg flag = {}, src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
-            flag,
-            flow_key.src_addr,
-            flow_key.src_port,
-            flow_key.dest_addr,
-            flow_key.dest_port,
-            size,
-        );
     }
 
     Ok(0)
@@ -113,17 +102,6 @@ fn try_tcp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
                 let _ = tracker.insert(&flow_key, &(size as u64), 0);
             }
         };
-
-        info!(
-            &ctx,
-            "tcp_recvmsg flag = {} src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
-            flag,
-            flow_key.src_addr,
-            flow_key.src_port,
-            flow_key.dest_addr,
-            flow_key.dest_port,
-            size,
-        );
     }
 
     Ok(0)
@@ -156,17 +134,6 @@ fn try_udp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
                 let _ = tracker.insert(&flow_key, &(size as u64), 0);
             }
         };
-
-        info!(
-            &ctx,
-            "udp_sendmsg flag = {}, src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
-            flag,
-            flow_key.src_addr,
-            flow_key.src_port,
-            flow_key.dest_addr,
-            flow_key.dest_port,
-            size,
-        );
     }
 
     Ok(0)
@@ -199,16 +166,6 @@ fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
                 let _ = tracker.insert(&flow_key, &(size as u64), 0);
             }
         };
-        info!(
-            &ctx,
-            "udp_recvmsg flag = {}, src addr: {:i}, port: {}, dest addr: {:i}, port: {}. Size = {}",
-            flag,
-            flow_key.src_addr,
-            flow_key.src_port,
-            flow_key.dest_addr,
-            flow_key.dest_port,
-            size,
-        );
     }
 
     Ok(0)
