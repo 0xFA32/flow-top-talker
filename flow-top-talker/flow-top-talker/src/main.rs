@@ -134,29 +134,7 @@ fn fetch_latest_data(
                                 total_throughput += cur_throughput[index];
                             }
 
-                            if heap.len() == MAX_SIZE {
-                                let lowest_flow = heap.peek().unwrap();
-                                if lowest_flow.throughput < total_throughput {
-                                    heap.pop();
-                                    heap.push(FlowInfo {
-                                        src_addr: flow_key.src_addr,
-                                        dest_addr: flow_key.dest_addr,
-                                        src_port: flow_key.src_port,
-                                        dest_port: flow_key.dest_port,
-                                        throughput: total_throughput,
-                                    });
-                                }
-                            } else {
-                                heap.push(FlowInfo {
-                                    src_addr: flow_key.src_addr,
-                                    dest_addr: flow_key.dest_addr,
-                                    src_port: flow_key.src_port,
-                                    dest_port: flow_key.dest_port,
-                                    throughput: total_throughput,
-                                });                                
-                            }
-
-
+                            add_to_heap(heap, MAX_SIZE, &flow_key, total_throughput);
                         },
                         _ => {}
                     }
@@ -169,6 +147,35 @@ fn fetch_latest_data(
         },
         None => { return; }
     }
+}
+
+fn add_to_heap(
+    heap: &mut BinaryHeap<FlowInfo>,
+    max_size: usize,
+    flow_key: &FlowKey,
+    total_throughput: u64,
+) {
+    if heap.len() == max_size {
+        let lowest_flow = heap.peek().unwrap();
+        if lowest_flow.throughput < total_throughput {
+            heap.pop();
+            heap.push(FlowInfo {
+                src_addr: flow_key.src_addr,
+                dest_addr: flow_key.dest_addr,
+                src_port: flow_key.src_port,
+                dest_port: flow_key.dest_port,
+                throughput: total_throughput,
+            });
+        }
+    } else {
+        heap.push(FlowInfo {
+            src_addr: flow_key.src_addr,
+            dest_addr: flow_key.dest_addr,
+            src_port: flow_key.src_port,
+            dest_port: flow_key.dest_port,
+            throughput: total_throughput,
+        });                                
+    }    
 }
 
 // Attach to the beginning of the kernel function mentioned via kprobe_name.
@@ -199,5 +206,66 @@ impl PartialOrd for FlowInfo {
 impl Ord for FlowInfo {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
        other.throughput.cmp(&self.throughput)
+    }
+}
+
+mod tests {
+    use std::collections::BinaryHeap;
+
+    use flow_top_talker_common::common_types::FlowKey;
+
+    use crate::{add_to_heap, FlowInfo};
+
+    #[test]
+    fn add_data_to_heap_2() {
+        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+        let key1 = FlowKey::new(0, 0, 0, 0, 1);
+        let key2 = FlowKey::new(0, 1, 0, 1, 1);
+        for t in 100..200 {
+            let flow_key = if t%2 == 0 { &key1 } else { &key2 };
+            add_to_heap(&mut heap, 2, flow_key, t);
+        }
+
+        assert_eq!(heap.len(), 2);
+        assert_eq!(heap.pop().unwrap().throughput, 198);
+        assert_eq!(heap.pop().unwrap().throughput, 199);
+    }
+
+    #[test]
+    fn add_data_to_heap_5() {
+        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+        let key1 = FlowKey::new(0, 0, 0, 0, 1);
+        let key2 = FlowKey::new(0, 1, 0, 1, 1);
+        for t in 100..200 {
+            let flow_key = if t%2 == 0 { &key1 } else { &key2 };
+            add_to_heap(&mut heap, 5, flow_key, t);
+        }
+
+        assert_eq!(heap.len(), 5);
+        assert_eq!(heap.pop().unwrap().throughput, 195);
+        assert_eq!(heap.pop().unwrap().throughput, 196);
+        assert_eq!(heap.pop().unwrap().throughput, 197);
+        assert_eq!(heap.pop().unwrap().throughput, 198);
+        assert_eq!(heap.pop().unwrap().throughput, 199);
+    }
+
+    #[test]
+    fn add_data_to_heap_higher_flow_key() {
+        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+        let key1 = FlowKey::new(0, 0, 0, 0, 1);
+        let key2 = FlowKey::new(100, 100, 1000, 1000, 10);
+        for t in 100..200 {
+            if t%2 == 0 { 
+                add_to_heap(&mut heap, 3, &key1, t);
+            } else { 
+                add_to_heap(&mut heap, 3, &key2, 1);
+            };
+            
+        }
+
+        assert_eq!(heap.len(), 3);
+        assert_eq!(heap.pop().unwrap().throughput, 194);
+        assert_eq!(heap.pop().unwrap().throughput, 196);
+        assert_eq!(heap.pop().unwrap().throughput, 198);
     }
 }
