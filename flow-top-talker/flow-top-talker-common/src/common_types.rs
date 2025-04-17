@@ -41,14 +41,15 @@ impl FlowKey {
     }
 }
 
-#[cfg(feature = "with-aya")]
-unsafe impl aya::Pod for FlowKey {}
-
+/// Key for the config to pass to ebpf program.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ConfigKey {
     PID,
     TID,
 }
+
+#[cfg(feature = "with-aya")]
+unsafe impl aya::Pod for FlowKey {}
 
 #[cfg(feature = "with-aya")]
 unsafe impl aya::Pod for ConfigKey {}
