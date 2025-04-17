@@ -18,7 +18,6 @@ use clap::Parser;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let top_n = cli.top_n;
 
     env_logger::init();
 

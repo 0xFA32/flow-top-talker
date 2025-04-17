@@ -1,5 +1,3 @@
-use std::collections::BinaryHeap;
-
 use aya::{
     maps::{
         Array, HashMap, MapData, MapError, PerCpuHashMap
@@ -11,7 +9,10 @@ use log::{debug, warn};
 use crate::{cli::Cli, flow_info::LimitedMaxHeap};
 
 use flow_top_talker_common::common_types::{
-    ConfigKey, FlowKey, CONFIG_MAP_NAME, EGRESS_TRACKER_0_MAP_NAME, EGRESS_TRACKER_1_MAP_NAME, FLAG_MAP_NAME, INGRESS_TRACKER_0_MAP_NAME, INGRESS_TRACKER_1_MAP_NAME
+    ConfigKey, FlowKey,
+    CONFIG_MAP_NAME, EGRESS_TRACKER_0_MAP_NAME,
+    EGRESS_TRACKER_1_MAP_NAME, FLAG_MAP_NAME, INGRESS_TRACKER_0_MAP_NAME,
+    INGRESS_TRACKER_1_MAP_NAME,
 };
 use anyhow::anyhow;
 
@@ -161,4 +162,3 @@ impl EbpfHandler {
     }
     
 }
-
