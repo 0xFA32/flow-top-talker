@@ -5,6 +5,7 @@ pub static INGRESS_TRACKER_1_MAP_NAME: &str = "INGRESS_TRACKER_1";
 pub static EGRESS_TRACKER_0_MAP_NAME: &str = "EGRESS_TRACKER_0";
 pub static EGRESS_TRACKER_1_MAP_NAME: &str = "INGRESS_TRACKER_1";
 pub static FLAG_MAP_NAME: &str = "FLAG";
+pub static CONFIG_MAP_NAME: &str = "CONFIG";
 
 
 /// Struct defining the key for each flow by 5-tuple.
@@ -42,3 +43,12 @@ impl FlowKey {
 
 #[cfg(feature = "with-aya")]
 unsafe impl aya::Pod for FlowKey {}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ConfigKey {
+    PID,
+    TID,
+}
+
+#[cfg(feature = "with-aya")]
+unsafe impl aya::Pod for ConfigKey {}

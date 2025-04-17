@@ -1,38 +1,36 @@
+mod cli;
+mod flow_info;
+
 use std::{
     collections::BinaryHeap,
-    hash::Hash,
     thread::sleep,
     time::Duration,
     net::Ipv4Addr,
 };
 
+use anyhow::anyhow;
 use aya::{
     maps::{
-        Array,
-        PerCpuHashMap,
-        MapData,
-        MapError
-    },
-    programs::KProbe,
-    Ebpf,
-    util::nr_cpus,
+        Array, HashMap, MapData, MapError, PerCpuHashMap
+    }, programs::KProbe, util::nr_cpus, Ebpf
 };
+use flow_info::add_to_heap;
 use flow_top_talker_common::common_types::{
-    FlowKey,
-    INGRESS_TRACKER_0_MAP_NAME,
-    INGRESS_TRACKER_1_MAP_NAME,
-    EGRESS_TRACKER_0_MAP_NAME,
-    EGRESS_TRACKER_1_MAP_NAME,
-    FLAG_MAP_NAME,
+    ConfigKey, FlowKey, CONFIG_MAP_NAME, EGRESS_TRACKER_0_MAP_NAME, EGRESS_TRACKER_1_MAP_NAME, FLAG_MAP_NAME, INGRESS_TRACKER_0_MAP_NAME, INGRESS_TRACKER_1_MAP_NAME
 };
+
+use crate::cli::Cli;
+use crate::flow_info::FlowInfo;
+use clap::Parser;
+
 #[rustfmt::skip]
 use log::{debug, warn};
 
-// TODO: Take this as input.
-const MAX_SIZE: usize = 10;
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    let top_n = cli.top_n;
+
     env_logger::init();
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
@@ -58,13 +56,14 @@ async fn main() -> anyhow::Result<()> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-
+    
     let nr_cpus = nr_cpus();
     if nr_cpus.is_err() {
         eprintln!("Not able to get possible CPU. Exiting early..");
         return Ok(());
     }
 
+    update_config(&mut ebpf, &cli)?;
     let nr_cpus = nr_cpus.unwrap();
 
     attach_to_beginning(&mut ebpf, "tcp_sendmsg_kprobe", "tcp_sendmsg")?;
@@ -84,12 +83,12 @@ async fn main() -> anyhow::Result<()> {
 
                 if flag == 0 {
                     let _ = array.set(0, 1, 0);
-                    fetch_latest_data(&mut ebpf, nr_cpus, INGRESS_TRACKER_0_MAP_NAME, &mut heap);
-                    fetch_latest_data(&mut ebpf, nr_cpus, EGRESS_TRACKER_0_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, nr_cpus, INGRESS_TRACKER_0_MAP_NAME, &mut heap, top_n);
+                    fetch_latest_data(&mut ebpf, nr_cpus, EGRESS_TRACKER_0_MAP_NAME, &mut heap, top_n);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    fetch_latest_data(&mut ebpf, nr_cpus, INGRESS_TRACKER_1_MAP_NAME, &mut heap);
-                    fetch_latest_data(&mut ebpf, nr_cpus, EGRESS_TRACKER_1_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, nr_cpus, INGRESS_TRACKER_1_MAP_NAME, &mut heap, top_n);
+                    fetch_latest_data(&mut ebpf, nr_cpus, EGRESS_TRACKER_1_MAP_NAME, &mut heap, top_n);
                 }
             },
             None => { continue }
@@ -113,11 +112,37 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn update_config(
+    ebpf: &mut Ebpf,
+    cli: &Cli
+) -> anyhow::Result<()> {
+    match ebpf.map_mut(CONFIG_MAP_NAME) {
+        Some(map) => {
+            let mut map_data: HashMap<&mut MapData, ConfigKey, u64> =
+                HashMap::try_from(map).unwrap();
+            
+            if let Some(pid) = cli.pid {
+                map_data.insert(ConfigKey::PID, pid, 0)?;
+            }
+
+            if let Some(tid) = cli.tid {
+                map_data.insert(ConfigKey::TID, tid, 0)?;
+            }
+
+            return Ok(());
+        },
+        None => {
+            return Err(anyhow!("Failed to read config map name"));
+        }
+    }
+}
+
 fn fetch_latest_data(
     ebpf: &mut Ebpf,
     nr_cpus: usize,
     map_name: &str, 
     heap: &mut BinaryHeap<FlowInfo>,
+    top_n: usize,
 ) {
     match ebpf.map_mut(map_name) {
         Some(map) => {
@@ -134,7 +159,7 @@ fn fetch_latest_data(
                                 total_throughput += cur_throughput[index];
                             }
 
-                            add_to_heap(heap, MAX_SIZE, &flow_key, total_throughput);
+                            add_to_heap(heap, top_n, &flow_key, total_throughput);
                         },
                         _ => {}
                     }
@@ -149,35 +174,6 @@ fn fetch_latest_data(
     }
 }
 
-fn add_to_heap(
-    heap: &mut BinaryHeap<FlowInfo>,
-    max_size: usize,
-    flow_key: &FlowKey,
-    total_throughput: u64,
-) {
-    if heap.len() == max_size {
-        let lowest_flow = heap.peek().unwrap();
-        if lowest_flow.throughput < total_throughput {
-            heap.pop();
-            heap.push(FlowInfo {
-                src_addr: flow_key.src_addr,
-                dest_addr: flow_key.dest_addr,
-                src_port: flow_key.src_port,
-                dest_port: flow_key.dest_port,
-                throughput: total_throughput,
-            });
-        }
-    } else {
-        heap.push(FlowInfo {
-            src_addr: flow_key.src_addr,
-            dest_addr: flow_key.dest_addr,
-            src_port: flow_key.src_port,
-            dest_port: flow_key.dest_port,
-            throughput: total_throughput,
-        });                                
-    }    
-}
-
 // Attach to the beginning of the kernel function mentioned via kprobe_name.
 fn attach_to_beginning(ebpf: &mut Ebpf, program_name: &str, kprobe_name: &str) -> anyhow::Result<()> {
     let program: &mut KProbe = ebpf.program_mut(program_name).unwrap().try_into()?;
@@ -186,86 +182,4 @@ fn attach_to_beginning(ebpf: &mut Ebpf, program_name: &str, kprobe_name: &str) -
     program.attach(kprobe_name, 0)?;
 
     Ok(())
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-struct FlowInfo {
-    src_addr: u32,
-    dest_addr: u32,
-    src_port: u16,
-    dest_port: u16,
-    throughput: u64,
-}
-
-impl PartialOrd for FlowInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        other.throughput.partial_cmp(&self.throughput)
-    }
-}
-
-impl Ord for FlowInfo {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-       other.throughput.cmp(&self.throughput)
-    }
-}
-
-mod tests {
-    use std::collections::BinaryHeap;
-
-    use flow_top_talker_common::common_types::FlowKey;
-
-    use crate::{add_to_heap, FlowInfo};
-
-    #[test]
-    fn add_data_to_heap_2() {
-        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
-        let key1 = FlowKey::new(0, 0, 0, 0, 1);
-        let key2 = FlowKey::new(0, 1, 0, 1, 1);
-        for t in 100..200 {
-            let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            add_to_heap(&mut heap, 2, flow_key, t);
-        }
-
-        assert_eq!(heap.len(), 2);
-        assert_eq!(heap.pop().unwrap().throughput, 198);
-        assert_eq!(heap.pop().unwrap().throughput, 199);
-    }
-
-    #[test]
-    fn add_data_to_heap_5() {
-        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
-        let key1 = FlowKey::new(0, 0, 0, 0, 1);
-        let key2 = FlowKey::new(0, 1, 0, 1, 1);
-        for t in 100..200 {
-            let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            add_to_heap(&mut heap, 5, flow_key, t);
-        }
-
-        assert_eq!(heap.len(), 5);
-        assert_eq!(heap.pop().unwrap().throughput, 195);
-        assert_eq!(heap.pop().unwrap().throughput, 196);
-        assert_eq!(heap.pop().unwrap().throughput, 197);
-        assert_eq!(heap.pop().unwrap().throughput, 198);
-        assert_eq!(heap.pop().unwrap().throughput, 199);
-    }
-
-    #[test]
-    fn add_data_to_heap_higher_flow_key() {
-        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
-        let key1 = FlowKey::new(0, 0, 0, 0, 1);
-        let key2 = FlowKey::new(100, 100, 1000, 1000, 10);
-        for t in 100..200 {
-            if t%2 == 0 { 
-                add_to_heap(&mut heap, 3, &key1, t);
-            } else { 
-                add_to_heap(&mut heap, 3, &key2, 1);
-            };
-            
-        }
-
-        assert_eq!(heap.len(), 3);
-        assert_eq!(heap.pop().unwrap().throughput, 194);
-        assert_eq!(heap.pop().unwrap().throughput, 196);
-        assert_eq!(heap.pop().unwrap().throughput, 198);
-    }
 }

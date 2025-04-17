@@ -35,4 +35,5 @@ Use latest rustup.
 ### Running it locally
 
 1. cargo build
-2. cargo run --config 'target."cfg(all())".runner="sudo -E"' 
+2. cargo run --config 'target."cfg(all())".runner="sudo -E"' -- --top-n 10
+

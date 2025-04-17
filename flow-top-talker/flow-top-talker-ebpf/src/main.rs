@@ -12,12 +12,12 @@ mod bindings;
 use aya_ebpf::{
     helpers::{bpf_get_current_pid_tgid, bpf_probe_read_kernel},
     macros::{kprobe, map},
+    maps::{Array, HashMap, PerCpuHashMap},
     programs::ProbeContext,
-    maps::{Array, PerCpuHashMap},
 };
 
 use bindings::*;
-use flow_top_talker_common::common_types::FlowKey;
+use flow_top_talker_common::common_types::{FlowKey, ConfigKey};
 
 // IpV4 and IpV6.
 const AF_INET: u16 = 2;
@@ -43,6 +43,10 @@ static EGRESS_TRACKER_1: PerCpuHashMap<FlowKey, u64> = PerCpuHashMap::with_max_e
 // Flag use to reset between the 2 tracker.
 #[map(name = "FLAG")]
 static FLAG: Array<u32> = Array::with_max_entries(1, 0);
+
+// HashMap used to maintain config provided by the user.
+#[map(name = "CONFIG")]
+static CONFIG: HashMap<ConfigKey, u64> = HashMap::with_max_entries(2, 0);
 
 #[kprobe]
 pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
@@ -186,7 +190,23 @@ fn unwrap_flow_info(ctx: &ProbeContext, prot: u8) -> Option<(FlowKey, usize)> {
     let sk_common = unsafe {
         bpf_probe_read_kernel(&(*sock).__sk_common as *const sock_common).ok()?
     };
-    let pid_tgid = bpf_get_current_pid_tgid();
+
+
+    if let Some(pid) = CONFIG.get_ptr(&ConfigKey::PID) {
+        unsafe {
+            if *pid as u32 != bpf_get_current_pid_tgid() as u32 {
+                return None;
+            }
+        }
+    }
+
+    if let Some(tid) = CONFIG.get_ptr(&ConfigKey::TID) {
+        unsafe {
+            if *tid as u32 != (bpf_get_current_pid_tgid() >> 32) as u32 {
+                return None;
+            }
+        }
+    }
 
     match sk_common.skc_family {
         AF_INET6 => {
