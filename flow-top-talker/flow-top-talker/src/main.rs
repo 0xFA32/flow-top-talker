@@ -6,7 +6,17 @@ use std::{
     net::Ipv4Addr,
 };
 
-use aya::{maps::{Array, HashMap, MapData, MapError}, programs::KProbe, Ebpf};
+use aya::{
+    maps::{
+        Array,
+        PerCpuHashMap,
+        MapData,
+        MapError
+    },
+    programs::KProbe,
+    Ebpf,
+    util::nr_cpus,
+};
 use flow_top_talker_common::common_types::{
     FlowKey,
     INGRESS_TRACKER_0_MAP_NAME,
@@ -20,8 +30,6 @@ use log::{debug, warn};
 
 // TODO: Take this as input.
 const MAX_SIZE: usize = 10;
-
-const BYTES_TO_MB: u64 = 1024 * 1024;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -51,11 +59,20 @@ async fn main() -> anyhow::Result<()> {
         warn!("failed to initialize eBPF logger: {}", e);
     }
 
+    let nr_cpus = nr_cpus();
+    if nr_cpus.is_err() {
+        eprintln!("Not able to get possible CPU. Exiting early..");
+        return Ok(());
+    }
+
+    let nr_cpus = nr_cpus.unwrap();
+
     attach_to_beginning(&mut ebpf, "tcp_sendmsg_kprobe", "tcp_sendmsg")?;
     attach_to_beginning(&mut ebpf, "tcp_recvmsg_kprobe", "tcp_recvmsg")?;
     attach_to_beginning(&mut ebpf, "udp_sendmsg_kprobe", "udp_sendmsg")?;
     attach_to_beginning(&mut ebpf, "udp_recvmsg_kprobe", "udp_recvmsg")?;
 
+    
     let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
 
     loop {
@@ -67,12 +84,12 @@ async fn main() -> anyhow::Result<()> {
 
                 if flag == 0 {
                     let _ = array.set(0, 1, 0);
-                    fetch_latest_data(&mut ebpf, INGRESS_TRACKER_0_MAP_NAME, &mut heap);
-                    fetch_latest_data(&mut ebpf, EGRESS_TRACKER_0_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, nr_cpus, INGRESS_TRACKER_0_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, nr_cpus, EGRESS_TRACKER_0_MAP_NAME, &mut heap);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    fetch_latest_data(&mut ebpf, INGRESS_TRACKER_1_MAP_NAME, &mut heap);
-                    fetch_latest_data(&mut ebpf, EGRESS_TRACKER_1_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, nr_cpus, INGRESS_TRACKER_1_MAP_NAME, &mut heap);
+                    fetch_latest_data(&mut ebpf, nr_cpus, EGRESS_TRACKER_1_MAP_NAME, &mut heap);
                 }
             },
             None => { continue }
@@ -98,29 +115,35 @@ async fn main() -> anyhow::Result<()> {
 
 fn fetch_latest_data(
     ebpf: &mut Ebpf,
+    nr_cpus: usize,
     map_name: &str, 
     heap: &mut BinaryHeap<FlowInfo>,
 ) {
     match ebpf.map_mut(map_name) {
         Some(map) => {
-            let mut map_data: HashMap<&mut MapData, FlowKey, u64> =
-                HashMap::try_from(map).unwrap();
+            let mut map_data: PerCpuHashMap<&mut MapData, FlowKey, u64> =
+                PerCpuHashMap::try_from(map).unwrap();
             let keys: Vec<Result<FlowKey, MapError>> = map_data.keys().collect();
             for key in keys {
                 if let Ok(flow_key) = key {
                     match map_data.get(&flow_key, 0) {
                         Ok(cur_throughput) => {
 
+                            let mut total_throughput = 0;
+                            for index in 1..nr_cpus {
+                                total_throughput += cur_throughput[index];
+                            }
+
                             if heap.len() == MAX_SIZE {
                                 let lowest_flow = heap.peek().unwrap();
-                                if lowest_flow.throughput < cur_throughput {
+                                if lowest_flow.throughput < total_throughput {
                                     heap.pop();
                                     heap.push(FlowInfo {
                                         src_addr: flow_key.src_addr,
                                         dest_addr: flow_key.dest_addr,
                                         src_port: flow_key.src_port,
                                         dest_port: flow_key.dest_port,
-                                        throughput: cur_throughput,
+                                        throughput: total_throughput,
                                     });
                                 }
                             } else {
@@ -129,7 +152,7 @@ fn fetch_latest_data(
                                     dest_addr: flow_key.dest_addr,
                                     src_port: flow_key.src_port,
                                     dest_port: flow_key.dest_port,
-                                    throughput: cur_throughput,
+                                    throughput: total_throughput,
                                 });                                
                             }
 

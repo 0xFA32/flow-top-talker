@@ -13,7 +13,7 @@ use aya_ebpf::{
     helpers::{bpf_get_current_pid_tgid, bpf_probe_read_kernel},
     macros::{kprobe, map},
     programs::ProbeContext,
-    maps::{Array, HashMap}
+    maps::{Array, PerCpuHashMap},
 };
 
 use bindings::*;
@@ -28,18 +28,17 @@ const AF_INET6: u16 = 10;
 /// Based on the flag value set choose the appropriate map. This is an easy to way to clear
 /// the map by the user program while the ebpf program continues to track the throughput.
 /// 
-/// TODO: use per-cpu hash map and aggregate in user-space.
 #[map(name = "INGRESS_TRACKER_0")]
-static INGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+static INGRESS_TRACKER_0: PerCpuHashMap<FlowKey, u64> = PerCpuHashMap::with_max_entries(10240, 0);
 
 #[map(name = "INGRESS_TRACKER_1")]
-static INGRESS_TRACKER_1: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+static INGRESS_TRACKER_1: PerCpuHashMap<FlowKey, u64> = PerCpuHashMap::with_max_entries(10240, 0);
 
 #[map(name = "EGRESS_TRACKER_0")]
-static EGRESS_TRACKER_0: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+static EGRESS_TRACKER_0: PerCpuHashMap<FlowKey, u64> = PerCpuHashMap::with_max_entries(10240, 0);
 
 #[map(name = "EGRESS_TRACKER_1")]
-static EGRESS_TRACKER_1: HashMap<FlowKey, u64> = HashMap::with_max_entries(10240, 0);
+static EGRESS_TRACKER_1: PerCpuHashMap<FlowKey, u64> = PerCpuHashMap::with_max_entries(10240, 0);
 
 // Flag use to reset between the 2 tracker.
 #[map(name = "FLAG")]
