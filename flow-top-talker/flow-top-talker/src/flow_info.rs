@@ -1,4 +1,5 @@
 use std::collections::BinaryHeap;
+use std::collections::binary_heap::Iter;
 
 use flow_top_talker_common::common_types::FlowKey;
 
@@ -24,33 +25,62 @@ impl Ord for FlowInfo {
     }
 }
 
-pub fn add_to_heap(
-    heap: &mut BinaryHeap<FlowInfo>,
-    max_size: usize,
-    flow_key: &FlowKey,
-    total_throughput: u64,
-) {
-    if heap.len() == max_size {
-        let lowest_flow = heap.peek().unwrap();
-        if lowest_flow.throughput < total_throughput {
-            heap.pop();
-            heap.push(FlowInfo {
+pub struct LimitedMaxHeap {
+    top_n: usize,
+    heap: BinaryHeap<FlowInfo>,
+}
+
+impl LimitedMaxHeap {
+    pub fn new(top_n: usize) -> Self {
+        Self {
+            top_n,
+            heap: BinaryHeap::new(),
+        }
+    }
+
+    pub fn add_to_heap(
+        &mut self,
+        flow_key: &FlowKey,
+        total_throughput: u64,
+    ) {
+        if self.heap.len() == self.top_n {
+            let lowest_flow = self.heap.peek().unwrap();
+            if lowest_flow.throughput < total_throughput {
+                self.heap.pop();
+                self.heap.push(FlowInfo {
+                    src_addr: flow_key.src_addr,
+                    dest_addr: flow_key.dest_addr,
+                    src_port: flow_key.src_port,
+                    dest_port: flow_key.dest_port,
+                    throughput: total_throughput,
+                });
+            }
+        } else {
+            self.heap.push(FlowInfo {
                 src_addr: flow_key.src_addr,
                 dest_addr: flow_key.dest_addr,
                 src_port: flow_key.src_port,
                 dest_port: flow_key.dest_port,
                 throughput: total_throughput,
-            });
-        }
-    } else {
-        heap.push(FlowInfo {
-            src_addr: flow_key.src_addr,
-            dest_addr: flow_key.dest_addr,
-            src_port: flow_key.src_port,
-            dest_port: flow_key.dest_port,
-            throughput: total_throughput,
-        });                                
-    }    
+            });                                
+        }   
+    }
+
+    pub fn len(&self) -> usize {
+        self.heap.len()
+    }
+
+    pub fn pop(&mut self) -> Option<FlowInfo> {
+        self.heap.pop()
+    }
+
+    pub fn clear(&mut self) {
+        self.heap.clear()
+    }
+
+    pub fn iter(&self) -> Iter<'_, FlowInfo> {
+        self.heap.iter()
+    }
 }
 
 mod tests {
@@ -58,16 +88,16 @@ mod tests {
 
     use flow_top_talker_common::common_types::FlowKey;
 
-    use crate::{add_to_heap, FlowInfo};
+    use crate::{flow_info::LimitedMaxHeap, FlowInfo};
 
     #[test]
     fn add_data_to_heap_2() {
-        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+        let mut heap = LimitedMaxHeap::new(2);
         let key1 = FlowKey::new(0, 0, 0, 0, 1);
         let key2 = FlowKey::new(0, 1, 0, 1, 1);
         for t in 100..200 {
             let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            add_to_heap(&mut heap, 2, flow_key, t);
+            heap.add_to_heap(flow_key, t);
         }
 
         assert_eq!(heap.len(), 2);
@@ -77,12 +107,12 @@ mod tests {
 
     #[test]
     fn add_data_to_heap_5() {
-        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+        let mut heap = LimitedMaxHeap::new(5);
         let key1 = FlowKey::new(0, 0, 0, 0, 1);
         let key2 = FlowKey::new(0, 1, 0, 1, 1);
         for t in 100..200 {
             let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            add_to_heap(&mut heap, 5, flow_key, t);
+            heap.add_to_heap(flow_key, t);
         }
 
         assert_eq!(heap.len(), 5);
@@ -95,14 +125,14 @@ mod tests {
 
     #[test]
     fn add_data_to_heap_higher_flow_key() {
-        let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+        let mut heap = LimitedMaxHeap::new(3);
         let key1 = FlowKey::new(0, 0, 0, 0, 1);
         let key2 = FlowKey::new(100, 100, 1000, 1000, 10);
         for t in 100..200 {
             if t%2 == 0 { 
-                add_to_heap(&mut heap, 3, &key1, t);
+                heap.add_to_heap(&key1, t);
             } else { 
-                add_to_heap(&mut heap, 3, &key2, 1);
+                heap.add_to_heap(&key2, 1);
             };
             
         }

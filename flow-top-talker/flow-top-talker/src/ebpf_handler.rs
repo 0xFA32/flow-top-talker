@@ -8,9 +8,8 @@ use aya::{
 #[rustfmt::skip]
 use log::{debug, warn};
 
-use crate::{cli::Cli, flow_info::FlowInfo};
+use crate::{cli::Cli, flow_info::LimitedMaxHeap};
 
-use crate::flow_info::add_to_heap;
 use flow_top_talker_common::common_types::{
     ConfigKey, FlowKey, CONFIG_MAP_NAME, EGRESS_TRACKER_0_MAP_NAME, EGRESS_TRACKER_1_MAP_NAME, FLAG_MAP_NAME, INGRESS_TRACKER_0_MAP_NAME, INGRESS_TRACKER_1_MAP_NAME
 };
@@ -56,7 +55,8 @@ impl EbpfHandler {
         return Ok(EbpfHandler { ebpf: ebpf, nr_cpus: nr_cpus.unwrap() });
     }
 
-    pub fn update_config(
+    /// Add config to the ebpf program.
+    pub fn add_config(
         &mut self,
         cli: &Cli
     ) -> anyhow::Result<()> {
@@ -81,6 +81,7 @@ impl EbpfHandler {
         }
     }
 
+    /// Attach to required kprobes.
     pub fn attach(&mut self) -> anyhow::Result<()> {
         self.attach_to_beginning("tcp_sendmsg_kprobe", "tcp_sendmsg")?;
         self.attach_to_beginning("tcp_recvmsg_kprobe", "tcp_recvmsg")?;
@@ -90,7 +91,8 @@ impl EbpfHandler {
         return Ok(());
     }
 
-    pub fn rotate_data(&mut self, heap: &mut BinaryHeap<FlowInfo>, top_n: usize) -> anyhow::Result<()> {
+    /// Rotate data and add it to the heap provided.
+    pub fn rotate_data(&mut self, heap: &mut LimitedMaxHeap) -> anyhow::Result<()> {
         match self.ebpf.map_mut(FLAG_MAP_NAME) {
             Some(map) => {
                 let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
@@ -98,12 +100,12 @@ impl EbpfHandler {
 
                 if flag == 0 {
                     let _ = array.set(0, 1, 0);
-                    self.fetch_latest_data( INGRESS_TRACKER_0_MAP_NAME, heap, top_n);
-                    self.fetch_latest_data( EGRESS_TRACKER_0_MAP_NAME, heap, top_n);
+                    self.fetch_latest_data( INGRESS_TRACKER_0_MAP_NAME, heap);
+                    self.fetch_latest_data( EGRESS_TRACKER_0_MAP_NAME, heap);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    self.fetch_latest_data( INGRESS_TRACKER_1_MAP_NAME, heap, top_n);
-                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, heap, top_n);
+                    self.fetch_latest_data( INGRESS_TRACKER_1_MAP_NAME, heap);
+                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, heap);
                 }
             },
             None => { }
@@ -126,8 +128,7 @@ impl EbpfHandler {
     fn fetch_latest_data(
         &mut self,
         map_name: &str, 
-        heap: &mut BinaryHeap<FlowInfo>,
-        top_n: usize,
+        heap: &mut LimitedMaxHeap,
     ) {
         match self.ebpf.map_mut(map_name) {
             Some(map) => {
@@ -144,7 +145,7 @@ impl EbpfHandler {
                                     total_throughput += cur_throughput[index];
                                 }
     
-                                add_to_heap(heap, top_n, &flow_key, total_throughput);
+                                heap.add_to_heap(&flow_key, total_throughput);
                             },
                             _ => {}
                         }

@@ -3,13 +3,12 @@ mod flow_info;
 mod ebpf_handler;
 
 use std::{
-    collections::BinaryHeap,
     thread::sleep,
     time::Duration,
     net::Ipv4Addr,
 };
 
-use flow_info::add_to_heap;
+use flow_info::LimitedMaxHeap;
 
 use crate::cli::Cli;
 use crate::flow_info::FlowInfo;
@@ -24,14 +23,14 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let mut ebpf_handler = EbpfHandler::init()?;
-    ebpf_handler.update_config(&cli)?;
+    ebpf_handler.add_config(&cli)?;
     ebpf_handler.attach()?;
 
-    let mut heap: BinaryHeap<FlowInfo> = BinaryHeap::new();
+    let mut heap = LimitedMaxHeap::new(cli.top_n);
 
     loop {
         sleep(Duration::from_secs(1));
-        ebpf_handler.rotate_data(&mut heap, top_n)?;
+        ebpf_handler.rotate_data(&mut heap)?;
 
         println!("--------------Printing Flow info--------------------");
         for flow_info in heap.iter() {
