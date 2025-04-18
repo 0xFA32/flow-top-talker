@@ -146,7 +146,7 @@ impl EbpfHandler {
                                     total_throughput += cur_throughput[index];
                                 }
     
-                                heap.add_to_heap(&flow_key, total_throughput);
+                                heap.add(&flow_key, total_throughput);
                             },
                             _ => {}
                         }

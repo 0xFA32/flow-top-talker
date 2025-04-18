@@ -38,7 +38,7 @@ impl LimitedMaxHeap {
         }
     }
 
-    pub fn add_to_heap(
+    pub fn add(
         &mut self,
         flow_key: &FlowKey,
         total_throughput: u64,
@@ -66,11 +66,13 @@ impl LimitedMaxHeap {
         }   
     }
 
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    fn len(&self) -> usize {
         self.heap.len()
     }
 
-    pub fn pop(&mut self) -> Option<FlowInfo> {
+    #[cfg(test)]
+    fn pop(&mut self) -> Option<FlowInfo> {
         self.heap.pop()
     }
 
@@ -110,7 +112,7 @@ mod tests {
         let key2 = FlowKey::new(0, 1, 0, 1, 1);
         for t in 100..200 {
             let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            heap.add_to_heap(flow_key, t);
+            heap.add(flow_key, t);
         }
 
         assert_eq!(heap.len(), 2);
@@ -125,7 +127,7 @@ mod tests {
         let key2 = FlowKey::new(0, 1, 0, 1, 1);
         for t in 100..200 {
             let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            heap.add_to_heap(flow_key, t);
+            heap.add(flow_key, t);
         }
 
         assert_eq!(heap.len(), 5);
@@ -143,9 +145,9 @@ mod tests {
         let key2 = FlowKey::new(100, 100, 1000, 1000, 10);
         for t in 100..200 {
             if t%2 == 0 { 
-                heap.add_to_heap(&key1, t);
+                heap.add(&key1, t);
             } else { 
-                heap.add_to_heap(&key2, 1);
+                heap.add(&key2, 1);
             };
             
         }
