@@ -78,8 +78,21 @@ impl LimitedMaxHeap {
         self.heap.clear()
     }
 
-    pub fn iter(&self) -> Iter<'_, FlowInfo> {
-        self.heap.iter()
+    pub fn liter(&self) -> Liter {
+        Liter { iter: self.heap.iter() }
+    }
+}
+
+/// Iterator for the limited max heap.
+pub struct Liter<'a> {
+    iter: Iter<'a, FlowInfo>,
+}
+
+impl<'a> Iterator for Liter<'a> {
+    type Item = &'a FlowInfo;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
     }
 }
 

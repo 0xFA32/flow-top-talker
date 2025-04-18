@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
         ebpf_handler.rotate_data(&mut heap)?;
 
         println!("--------------Printing Flow info--------------------");
-        for flow_info in heap.iter() {
+        for flow_info in heap.liter() {
             println!("{:?}:{} --> {:?}:{}  [{} Bps]",
                 Ipv4Addr::from(flow_info.src_addr),
                 flow_info.src_port,
