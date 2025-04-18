@@ -48,6 +48,32 @@ static FLAG: Array<u32> = Array::with_max_entries(1, 0);
 #[map(name = "CONFIG")]
 static CONFIG: HashMap<ConfigKey, u64> = HashMap::with_max_entries(2, 0);
 
+macro_rules! process_kprobe {
+    ($context:expr, $tracker0:expr, $tracker1:expr) => {
+        if let Some((flow_key, size)) = unwrap_flow_info(&$context, 1) {
+            let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
+            let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
+
+            let tracker = if flag == 0 {
+                &$tracker0
+            } else {
+                &$tracker1
+            };
+
+            match tracker.get_ptr_mut(&flow_key) {
+                Some(val) => {
+                    unsafe { *val += size as u64; }
+                },
+                None => {
+                    let _ = tracker.insert(&flow_key, &(size as u64), 0);
+                }
+            }
+        }
+
+        return Ok(0);
+    };
+}
+
 #[kprobe]
 pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
     match try_tcp_sendmsg_kprobe(ctx) {
@@ -57,27 +83,7 @@ pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 0) {
-        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
-        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
-
-        let tracker = if flag == 0 {
-            &EGRESS_TRACKER_0
-        } else {
-            &EGRESS_TRACKER_1
-        };
-
-        match tracker.get_ptr_mut(&flow_key) {
-            Some(val) => unsafe {
-                *val += size as u64;
-            },
-            None => {
-                let _ = tracker.insert(&flow_key, &(size as u64), 0);
-            }
-        };
-    }
-
-    Ok(0)
+    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1);
 }
 
 #[kprobe]
@@ -89,27 +95,7 @@ pub fn tcp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 0) {
-        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
-        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
-
-        let tracker = if flag == 0 {
-            &INGRESS_TRACKER_0
-        } else {
-            &INGRESS_TRACKER_1
-        };
-
-        match tracker.get_ptr_mut(&flow_key) {
-            Some(val) => unsafe {
-                *val += size as u64;
-            },
-            None => {
-                let _ = tracker.insert(&flow_key, &(size as u64), 0);
-            }
-        };
-    }
-
-    Ok(0)
+    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1);
 }
 
 #[kprobe]
@@ -121,27 +107,7 @@ pub fn udp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_udp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 1) {
-        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
-        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
-
-        let tracker = if flag == 0 {
-            &EGRESS_TRACKER_0
-        } else {
-            &EGRESS_TRACKER_1
-        };
-
-        match tracker.get_ptr_mut(&flow_key) {
-            Some(val) => unsafe {
-                *val += size as u64;
-            },
-            None => {
-                let _ = tracker.insert(&flow_key, &(size as u64), 0);
-            }
-        };
-    }
-
-    Ok(0)
+    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1);
 }
 
 #[kprobe]
@@ -153,27 +119,7 @@ pub fn udp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    if let Some((flow_key, size)) = unwrap_flow_info(&ctx, 1) {
-        let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
-        let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
-
-        let tracker = if flag == 0 {
-            &INGRESS_TRACKER_0
-        } else {
-            &INGRESS_TRACKER_1
-        };
-
-        match tracker.get_ptr_mut(&flow_key) {
-            Some(val) => unsafe {
-                *val += size as u64;
-            },
-            None => {
-                let _ = tracker.insert(&flow_key, &(size as u64), 0);
-            }
-        };
-    }
-
-    Ok(0)
+    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1);
 }
 
 /// Unwrap flow info from TCP/UDP send and recv msg. In all of the APIs the 3rd parameter
