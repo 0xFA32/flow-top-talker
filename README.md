@@ -37,3 +37,8 @@ Use latest rustup.
 1. cargo build
 2. cargo run --config 'target."cfg(all())".runner="sudo -E"' -- --top-n 10
 
+### TODO
+
+1. Add the option to display host name instead of ip.
+2. Calculate avg throughput.
+3. Add more filters to the tool.
