@@ -142,7 +142,7 @@ impl EbpfHandler {
                             Ok(cur_throughput) => {
     
                                 let mut total_throughput = 0;
-                                for index in 1..self.nr_cpus {
+                                for index in 0..self.nr_cpus {
                                     total_throughput += cur_throughput[index];
                                 }
     
