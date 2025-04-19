@@ -43,7 +43,6 @@ Use latest rustup.
 
 ### TODO
 
-1. Add the option to display host name instead of ip.
-2. Calculate avg throughput.
-3. Cache padding in FlowKey.
-4. Add more filters to the tool.
+1. Calculate avg throughput.
+2. Cache padding in FlowKey.
+3. Add more filters to the tool.

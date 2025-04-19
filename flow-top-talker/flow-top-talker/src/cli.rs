@@ -15,4 +15,8 @@ pub struct Cli {
     /// Filter by TID.
     #[arg(short = 't', long)]
     pub tid: Option<u64>,
+
+    /// Display hostname
+    #[arg(short = 'x', long, default_value_t = false)]
+    pub host_name: bool,
 }
