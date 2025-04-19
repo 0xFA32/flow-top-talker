@@ -10,6 +10,7 @@ pub struct FlowInfo {
     pub dest_addr: u32,
     pub src_port: u16,
     pub dest_port: u16,
+    pub protocol: u8,
     pub throughput: u64,
 }
 
@@ -52,6 +53,7 @@ impl LimitedMaxHeap {
                     dest_addr: flow_key.dest_addr,
                     src_port: flow_key.src_port,
                     dest_port: flow_key.dest_port,
+                    protocol: flow_key.protocol,
                     throughput: total_throughput,
                 });
             }
@@ -61,6 +63,7 @@ impl LimitedMaxHeap {
                 dest_addr: flow_key.dest_addr,
                 src_port: flow_key.src_port,
                 dest_port: flow_key.dest_port,
+                protocol: flow_key.protocol,
                 throughput: total_throughput,
             });                                
         }   

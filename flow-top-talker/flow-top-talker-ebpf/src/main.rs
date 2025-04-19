@@ -17,7 +17,7 @@ use aya_ebpf::{
 };
 
 use bindings::*;
-use flow_top_talker_common::common_types::{FlowKey, ConfigKey};
+use flow_top_talker_common::common_types::{ConfigKey, FlowKey, TCP, UDP};
 
 // IpV4 and IpV6.
 const AF_INET: u16 = 2;
@@ -49,8 +49,8 @@ static FLAG: Array<u32> = Array::with_max_entries(1, 0);
 static CONFIG: HashMap<ConfigKey, u64> = HashMap::with_max_entries(2, 0);
 
 macro_rules! process_kprobe {
-    ($context:expr, $tracker0:expr, $tracker1:expr) => {
-        if let Some((flow_key, size)) = unwrap_flow_info(&$context, 1) {
+    ($context:expr, $tracker0:expr, $tracker1:expr, $prot:expr) => {
+        if let Some((flow_key, size)) = unwrap_flow_info(&$context, $prot) {
             let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
             let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
 
@@ -83,7 +83,7 @@ pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1);
+    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1, TCP);
 }
 
 #[kprobe]
@@ -95,7 +95,7 @@ pub fn tcp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_tcp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1);
+    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1, TCP);
 }
 
 #[kprobe]
@@ -107,7 +107,7 @@ pub fn udp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_udp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1);
+    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1, UDP);
 }
 
 #[kprobe]
@@ -119,7 +119,7 @@ pub fn udp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
 }
 
 fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1);
+    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1, UDP);
 }
 
 /// Unwrap flow info from TCP/UDP send and recv msg. In all of the APIs the 3rd parameter

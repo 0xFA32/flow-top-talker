@@ -8,6 +8,8 @@ pub static EGRESS_TRACKER_1_MAP_NAME: &str = "INGRESS_TRACKER_1";
 pub static FLAG_MAP_NAME: &str = "FLAG";
 pub static CONFIG_MAP_NAME: &str = "CONFIG";
 
+pub static TCP: u8 = 0;
+pub static UDP: u8 = 1;
 
 /// Struct defining the key for each flow by 5-tuple.
 /// 
