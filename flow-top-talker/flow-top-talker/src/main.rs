@@ -68,11 +68,12 @@ async fn main() -> anyhow::Result<()> {
                 cells.push(Cell::from(format!("UDP")));
             };
 
-            if f.throughput > 10_000 {
-                cells.push(Cell::from(format!("{}", f.throughput)).style(Style::default().fg(Color::Red)));
-            } else {
-                cells.push(Cell::from(format!("{}", f.throughput)));
-            }
+            let color = match f.throughput {
+                val if val > 100_000 => Color::Red,
+                val if val > 10_000 => Color::Yellow,
+                _ => Color::default()
+            };
+            cells.push(Cell::from(format!("{}", f.throughput)).style(Style::default().fg(color)));
 
             Row::new(cells)
         }).collect();
