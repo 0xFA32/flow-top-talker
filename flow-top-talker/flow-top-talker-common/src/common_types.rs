@@ -13,9 +13,18 @@ pub static UDP: u8 = 1;
 
 /// Struct defining the key for each flow by 5-tuple.
 /// 
-/// TODO: Add padding to make it cache friendly.
-
+/// Align based on cache line so remaining would be padded automatically.
+/// For now setting it up for x86_64 and aarch64.
+/// https://github.com/crossbeam-rs/crossbeam/blob/983d56b6007ca4c22b56a665a7785f40f55c2a53/crossbeam-utils/src/cache_padded.rs#L80-L88
 #[repr(C)]
+#[cfg_attr(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+), repr(align(128)))]
+#[cfg_attr(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+)), repr(align(64)))]
 #[repr(align(64))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FlowKey {
@@ -45,6 +54,14 @@ impl FlowKey {
 }
 
 /// Key for the config to pass to ebpf program.
+/// 
+/// This would take 1 byte as it is just 2 values for now and it is fine 
+/// if it is not padded as the use case of this key is minimal,
+///     1. Key is used to setup initial configuration after which user space program
+///        will not be updating it further.
+///     2. Ebpf program uses it to filter out the data which if needed we can define a
+///        PerCpu hash map for it. But considering only 2 values, keeping it simple for
+///        now.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ConfigKey {
     PID,

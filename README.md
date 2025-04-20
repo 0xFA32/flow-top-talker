@@ -44,5 +44,4 @@ Use latest rustup.
 ### TODO
 
 1. Calculate avg throughput.
-2. Cache padding in FlowKey.
-3. Add more filters to the tool.
+2. Add more filters to the tool.
