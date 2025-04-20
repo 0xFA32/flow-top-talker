@@ -6,7 +6,7 @@ use aya::{
 #[rustfmt::skip]
 use log::{debug, warn};
 
-use crate::{cli::Cli, flow_info::{FlowDirection, LimitedMaxHeap}};
+use crate::{cli::Cli, flow_info::LimitedMaxHeap};
 
 use flow_top_talker_common::common_types::{
     ConfigKey, FlowKey,
@@ -112,12 +112,12 @@ impl EbpfHandler {
                 let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
                 if cur_flag_value == 0 {
                     let _ = array.set(0, 1, 0);
-                    self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, ingress_heap, FlowDirection::INGRESS);
-                    self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, egress_heap, FlowDirection::EGRESS);
+                    self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, ingress_heap);
+                    self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, egress_heap);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, ingress_heap, FlowDirection::INGRESS);
-                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, egress_heap, FlowDirection::EGRESS);
+                    self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, ingress_heap);
+                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, egress_heap);
                 }
             },
             None => { }
@@ -142,7 +142,6 @@ impl EbpfHandler {
         &mut self,
         map_name: &str, 
         heap: &mut LimitedMaxHeap,
-        flow_direction: FlowDirection,
     ) {
         match self.ebpf.map_mut(map_name) {
             Some(map) => {
@@ -159,7 +158,7 @@ impl EbpfHandler {
                                     total_throughput += cur_throughput[index];
                                 }
     
-                                heap.add(&flow_key, total_throughput, flow_direction);
+                                heap.add(&flow_key, total_throughput);
                             },
                             _ => {}
                         }
