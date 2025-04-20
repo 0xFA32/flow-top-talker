@@ -52,6 +52,8 @@ impl EbpfHandler {
             warn!("failed to initialize eBPF logger: {}", e);
         }
         
+        Self::init_flag(&mut ebpf)?;
+
         let nr_cpus = nr_cpus();
         if nr_cpus.is_err() {
             return Err(anyhow!("Not able to get possible CPU. Exiting early.."));
@@ -99,13 +101,15 @@ impl EbpfHandler {
     /// Rotate data and add it to the heap provided.
     /// 
     /// The flow info is shared between ebpf program and user app via a double buffer.
-    pub fn rotate_data(&mut self, heap: &mut LimitedMaxHeap) -> anyhow::Result<()> {
+    pub fn rotate_data(
+        &mut self,
+        heap: &mut LimitedMaxHeap,
+        cur_flag_value: u32,
+    ) -> anyhow::Result<()> {
         match self.ebpf.map_mut(FLAG_MAP_NAME) {
             Some(map) => {
                 let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
-                let flag = array.get(&0, 0).unwrap();
-
-                if flag == 0 {
+                if cur_flag_value == 0 {
                     let _ = array.set(0, 1, 0);
                     self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, heap);
                     self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, heap);
@@ -168,4 +172,31 @@ impl EbpfHandler {
         }
     }
     
+    fn init_flag(ebpf: &mut Ebpf) -> anyhow::Result<()> {
+        match ebpf.map_mut(FLAG_MAP_NAME) {
+            Some(map) => {
+                let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
+                array.set(0, 0, 0)?;
+
+                let mut counter = 0usize;
+                while counter < 5 {
+                    if array.get(&0, 0).unwrap() == 0 {
+                        break;
+                    }
+
+                    counter += 1;
+                }
+
+                if counter == 5 {
+                    return Err(anyhow!("Failed to init flag value"));
+                }
+                
+            }
+            None => {
+                return Err(anyhow!("Not able init flag value"));
+            }
+        };
+
+        return Ok(()); 
+    }
 }

@@ -42,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    let mut flag = 0u32;
     loop {
         if event::poll(Duration::from_secs(1))? {
             if let event::Event::Key(key) = event::read()? {
@@ -51,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        ebpf_handler.rotate_data(&mut heap)?;
+        ebpf_handler.rotate_data(&mut heap, flag)?;
 
         let top_flow_rows: Vec<Row> = generate_row(&heap, &mut dns_cache, &cli);
 
@@ -76,6 +77,7 @@ async fn main() -> anyhow::Result<()> {
         })?;
 
         heap.clear();
+        flag = flag ^ 0x1;
     }
 
     disable_raw_mode()?;
