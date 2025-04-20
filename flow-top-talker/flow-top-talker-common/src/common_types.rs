@@ -17,15 +17,7 @@ pub static UDP: u8 = 1;
 /// For now setting it up for x86_64 and aarch64.
 /// https://github.com/crossbeam-rs/crossbeam/blob/983d56b6007ca4c22b56a665a7785f40f55c2a53/crossbeam-utils/src/cache_padded.rs#L80-L88
 #[repr(C)]
-#[cfg_attr(any(
-    target_arch = "x86_64",
-    target_arch = "aarch64",
-), repr(align(128)))]
-#[cfg_attr(not(any(
-    target_arch = "x86_64",
-    target_arch = "aarch64",
-)), repr(align(64)))]
-#[repr(align(64))]
+#[repr(align(128))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FlowKey {
     pub src_addr: u32,
