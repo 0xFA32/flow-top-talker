@@ -75,7 +75,7 @@ This crate defines the common types used by both the eBPF and user-space program
 
 ### [Crate] flow-top-talker-ebpf
 
-The eBPF program which attaches to the kernel functions `tcp_sendmsg`, `tcp_recvmsg`, `udp_sendmsg`, and `udp_recvmsg` via kprobes at their entry points. All of these kernel functions have a `sock` pointer as the first argument and `size` as the third argument. From the `sock` structure, the 5-tuple information [src_addr, dest_addr, src_port, dest_port, and protocol] can be extracted, and the `size` is used to calculate throughput.
+The eBPF program which attaches to the kernel functions `tcp_sendmsg`, `tcp_recvmsg`, `udp_sendmsg`, and `udp_recvmsg` via kprobes at their entry points. All of these kernel functions have a `sock` pointer as the first argument and `size` as the third argument. From the `sock` structure, the 5-tuple information [src_addr, dest_addr, src_port, dest_port, and protocol] can be extracted, and the `size` is used to calculate throughput. The `aya-tool` is used to generate Rust bindings, which are then used to extract relevant information.
 
 Depending on the flag set by the user-space program, the eBPF program adds the 5-tuple and size to the appropriate `PerCpuHashMap`. The flag is read using `read_volatile` and the value of the flag is solely controlled by the user-space program and is not read by the user program after initialization (it uses local value to update). Which is sufficient; no additional memory fences or barriers are required.
 
