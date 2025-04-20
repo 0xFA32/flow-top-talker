@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
 
         ingress_heap.clear();
         egress_heap.clear();
-        flag = flag ^ 0x1;
+        flag ^= 0x1;
     }
 
     disable_raw_mode()?;
@@ -141,9 +141,9 @@ fn generate_row<'a>(
         }
 
         if f.protocol == TCP {
-            cells.push(Cell::from(format!("TCP")));
+            cells.push(Cell::from("TCP".to_string()));
         } else {
-            cells.push(Cell::from(format!("UDP")));
+            cells.push(Cell::from("UDP".to_string()));
         };
 
         let color = match f.throughput {
@@ -156,5 +156,5 @@ fn generate_row<'a>(
         Row::new(cells)
     }).collect();
 
-    return rows;
+    rows
 }

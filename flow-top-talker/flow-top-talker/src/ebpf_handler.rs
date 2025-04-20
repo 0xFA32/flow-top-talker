@@ -59,7 +59,7 @@ impl EbpfHandler {
             return Err(anyhow!("Not able to get possible CPU. Exiting early.."));
         }
         
-        return Ok(EbpfHandler { ebpf: ebpf, nr_cpus: nr_cpus.unwrap() });
+        Ok(EbpfHandler { ebpf, nr_cpus: nr_cpus.unwrap() })
     }
 
     /// Add config provided by the user to the ebpf program.
@@ -80,10 +80,10 @@ impl EbpfHandler {
                     map_data.insert(ConfigKey::TID, tid, 0)?;
                 }
     
-                return Ok(());
+                Ok(())
             },
             None => {
-                return Err(anyhow!("Failed to read config map name"));
+                Err(anyhow!("Failed to read config map name"))
             }
         }
     }
@@ -95,7 +95,7 @@ impl EbpfHandler {
         self.attach_to_beginning("udp_sendmsg_kprobe", "udp_sendmsg")?;
         self.attach_to_beginning("udp_recvmsg_kprobe", "udp_recvmsg")?;
 
-        return Ok(());
+        Ok(())
     }
 
     /// Rotate data and add it to the heap provided.
@@ -107,23 +107,20 @@ impl EbpfHandler {
         cur_flag_value: u32,
         egress_heap: &mut LimitedMaxHeap,
     ) -> anyhow::Result<()> {
-        match self.ebpf.map_mut(FLAG_MAP_NAME) {
-            Some(map) => {
-                let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
-                if cur_flag_value == 0 {
-                    let _ = array.set(0, 1, 0);
-                    self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, ingress_heap);
-                    self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, egress_heap);
-                } else {
-                    let _ = array.set(0, 0, 0);
-                    self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, ingress_heap);
-                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, egress_heap);
-                }
-            },
-            None => { }
-        };
+        if let Some(map) = self.ebpf.map_mut(FLAG_MAP_NAME) {
+            let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
+            if cur_flag_value == 0 {
+                let _ = array.set(0, 1, 0);
+                self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, ingress_heap);
+                self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, egress_heap);
+            } else {
+                let _ = array.set(0, 0, 0);
+                self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, ingress_heap);
+                self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, egress_heap);
+            }
+        }
 
-        return Ok(());
+        Ok(())
     }
 
 
@@ -143,61 +140,46 @@ impl EbpfHandler {
         map_name: &str, 
         heap: &mut LimitedMaxHeap,
     ) {
-        match self.ebpf.map_mut(map_name) {
-            Some(map) => {
-                let mut map_data: PerCpuHashMap<&mut MapData, FlowKey, u64> =
-                    PerCpuHashMap::try_from(map).unwrap();
-                let keys: Vec<Result<FlowKey, MapError>> = map_data.keys().collect();
-                for key in keys {
-                    if let Ok(flow_key) = key {
-                        match map_data.get(&flow_key, 0) {
-                            Ok(cur_throughput) => {
-    
-                                let mut total_throughput = 0;
-                                for index in 0..self.nr_cpus {
-                                    total_throughput += cur_throughput[index];
-                                }
-    
-                                heap.add(&flow_key, total_throughput);
-                            },
-                            _ => {}
-                        }
-    
-                        if let Err(_) = map_data.remove(&flow_key) {
-                            eprintln!("Error removing data from map...");
-                        }
+        if let Some(map) = self.ebpf.map_mut(map_name) {
+            let mut map_data: PerCpuHashMap<&mut MapData, FlowKey, u64> =
+                PerCpuHashMap::try_from(map).unwrap();
+            let keys: Vec<Result<FlowKey, MapError>> = map_data.keys().collect();
+            for key in keys.into_iter().flatten() {
+                if let Ok(cur_throughput) = map_data.get(&key, 0) {
+                    let mut total_throughput = 0;
+                    for index in 0..self.nr_cpus {
+                        total_throughput += cur_throughput[index];
                     }
+
+                    heap.add(&key, total_throughput);
                 }
-            },
-            None => { return; }
+
+                if map_data.remove(&key).is_err() {
+                    eprintln!("Error removing data from map...");
+                }
+            }
         }
     }
     
     fn init_flag(ebpf: &mut Ebpf) -> anyhow::Result<()> {
-        match ebpf.map_mut(FLAG_MAP_NAME) {
-            Some(map) => {
-                let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
-                array.set(0, 0, 0)?;
+        if let Some(map) = ebpf.map_mut(FLAG_MAP_NAME) {
+            let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
+            array.set(0, 0, 0)?;
 
-                let mut counter = 0usize;
-                while counter < 5 {
-                    if array.get(&0, 0).unwrap() == 0 {
-                        break;
-                    }
-
-                    counter += 1;
+            let mut counter = 0usize;
+            while counter < 5 {
+                if array.get(&0, 0).unwrap() == 0 {
+                    break;
                 }
 
-                if counter == 5 {
-                    return Err(anyhow!("Failed to init flag value"));
-                }
-                
+                counter += 1;
             }
-            None => {
-                return Err(anyhow!("Not able init flag value"));
-            }
-        };
 
-        return Ok(()); 
+            if counter == 5 {
+                return Err(anyhow!("Failed to init flag value"));
+            }
+        }
+
+        Ok(())
     }
 }

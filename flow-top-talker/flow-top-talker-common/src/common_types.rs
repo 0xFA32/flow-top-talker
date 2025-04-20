@@ -1,6 +1,7 @@
-/// Common types used in both ebpf and user space application.
+//! Common types used in both ebpf and user space application.
 
-/// Set of map names.
+//! Set of map names.
+
 pub static INGRESS_TRACKER_0_MAP_NAME: &str = "INGRESS_TRACKER_0";
 pub static INGRESS_TRACKER_1_MAP_NAME: &str = "INGRESS_TRACKER_1";
 pub static EGRESS_TRACKER_0_MAP_NAME: &str = "EGRESS_TRACKER_0";
