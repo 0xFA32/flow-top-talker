@@ -6,7 +6,7 @@ use aya::{
 #[rustfmt::skip]
 use log::{debug, warn};
 
-use crate::{cli::Cli, flow_info::LimitedMaxHeap};
+use crate::{cli::Cli, flow_info::{FlowDirection, LimitedMaxHeap}};
 
 use flow_top_talker_common::common_types::{
     ConfigKey, FlowKey,
@@ -103,20 +103,21 @@ impl EbpfHandler {
     /// The flow info is shared between ebpf program and user app via a double buffer.
     pub fn rotate_data(
         &mut self,
-        heap: &mut LimitedMaxHeap,
+        ingress_heap: &mut LimitedMaxHeap,
         cur_flag_value: u32,
+        egress_heap: &mut LimitedMaxHeap,
     ) -> anyhow::Result<()> {
         match self.ebpf.map_mut(FLAG_MAP_NAME) {
             Some(map) => {
                 let mut array: Array<&mut _, u32> = Array::try_from(map).unwrap();
                 if cur_flag_value == 0 {
                     let _ = array.set(0, 1, 0);
-                    self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, heap);
-                    self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, heap);
+                    self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, ingress_heap, FlowDirection::INGRESS);
+                    self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, egress_heap, FlowDirection::EGRESS);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, heap);
-                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, heap);
+                    self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, ingress_heap, FlowDirection::INGRESS);
+                    self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, egress_heap, FlowDirection::EGRESS);
                 }
             },
             None => { }
@@ -141,6 +142,7 @@ impl EbpfHandler {
         &mut self,
         map_name: &str, 
         heap: &mut LimitedMaxHeap,
+        flow_direction: FlowDirection,
     ) {
         match self.ebpf.map_mut(map_name) {
             Some(map) => {
@@ -157,7 +159,7 @@ impl EbpfHandler {
                                     total_throughput += cur_throughput[index];
                                 }
     
-                                heap.add(&flow_key, total_throughput);
+                                heap.add(&flow_key, total_throughput, flow_direction);
                             },
                             _ => {}
                         }

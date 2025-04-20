@@ -12,6 +12,14 @@ pub struct FlowInfo {
     pub src_port: u16,
     pub dest_port: u16,
     pub protocol: u8,
+    pub flow_direction: FlowDirection,
+}
+
+/// Flow direction.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FlowDirection {
+    INGRESS,
+    EGRESS,
 }
 
 impl PartialOrd for FlowInfo {
@@ -44,6 +52,7 @@ impl LimitedMaxHeap {
         &mut self,
         flow_key: &FlowKey,
         total_throughput: u64,
+        flow_direction: FlowDirection,
     ) {
         if self.heap.len() == self.top_n {
             let lowest_flow = self.heap.peek().unwrap();
@@ -56,6 +65,7 @@ impl LimitedMaxHeap {
                     dest_port: flow_key.dest_port,
                     protocol: flow_key.protocol,
                     throughput: total_throughput,
+                    flow_direction: flow_direction,
                 });
             }
         } else {
@@ -66,6 +76,7 @@ impl LimitedMaxHeap {
                 dest_port: flow_key.dest_port,
                 protocol: flow_key.protocol,
                 throughput: total_throughput,
+                flow_direction: flow_direction,
             });                                
         }   
     }
@@ -107,7 +118,7 @@ mod tests {
 
     use flow_top_talker_common::common_types::FlowKey;
 
-    use crate::{flow_info::LimitedMaxHeap, FlowInfo};
+    use crate::{flow_info::{FlowDirection, LimitedMaxHeap}, FlowInfo};
 
     #[test]
     fn add_data_to_heap_2() {
@@ -116,7 +127,7 @@ mod tests {
         let key2 = FlowKey::new(0, 1, 0, 1, 1);
         for t in 100..200 {
             let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            heap.add(flow_key, t);
+            heap.add(flow_key, t, FlowDirection::EGRESS);
         }
 
         assert_eq!(heap.len(), 2);
@@ -131,7 +142,7 @@ mod tests {
         let key2 = FlowKey::new(0, 1, 0, 1, 1);
         for t in 100..200 {
             let flow_key = if t%2 == 0 { &key1 } else { &key2 };
-            heap.add(flow_key, t);
+            heap.add(flow_key, t, FlowDirection::EGRESS);
         }
 
         assert_eq!(heap.len(), 5);
@@ -149,9 +160,9 @@ mod tests {
         let key2 = FlowKey::new(100, 100, 1000, 1000, 10);
         for t in 100..200 {
             if t%2 == 0 { 
-                heap.add(&key1, t);
+                heap.add(&key1, t, FlowDirection::EGRESS);
             } else { 
-                heap.add(&key2, 1);
+                heap.add(&key2, 1, FlowDirection::EGRESS);
             };
             
         }

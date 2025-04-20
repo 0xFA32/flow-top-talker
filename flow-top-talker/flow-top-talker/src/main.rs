@@ -32,7 +32,8 @@ async fn main() -> anyhow::Result<()> {
     ebpf_handler.add_config(&cli)?;
     ebpf_handler.attach()?;
 
-    let mut heap = LimitedMaxHeap::new(cli.top_n);
+    let mut ingress_heap = LimitedMaxHeap::new(cli.top_n);
+    let mut egress_heap = LimitedMaxHeap::new(cli.top_n);
     let mut dns_cache: LruCache<IpAddr, String> =
         LruCache::new(NonZeroUsize::new(10_000).unwrap());
 
@@ -41,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
+    
     let mut flag = 0u32;
     loop {
         if event::poll(Duration::from_secs(1))? {
@@ -52,31 +53,27 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        ebpf_handler.rotate_data(&mut heap, flag)?;
+        ebpf_handler.rotate_data(&mut ingress_heap, flag, &mut egress_heap)?;
 
-        let top_flow_rows: Vec<Row> = generate_row(&heap, &mut dns_cache, &cli);
+        let ingress_top_flow_rows: Vec<Row> = generate_row(&ingress_heap, &mut dns_cache, &cli);
+        let egress_top_flow_rows: Vec<Row> = generate_row(&egress_heap, &mut dns_cache, &cli);
 
-        terminal.draw(|f| {
-            let size = f.size();
+        terminal.draw(|frame| {
+            let terminal_section = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ])
+                .split(frame.size());
 
-            let header = Row::new(vec!["SrcIp:Port", "DestIp:Port", "Protocol", "Throughput(Bps)"])
-                .style(Style::default().add_modifier(Modifier::BOLD))
-                .set_style(Style::default().bg(Color::Blue));
-            
-            let table = Table::new(top_flow_rows)
-                .header(header)
-                .block(Block::default().borders(Borders::ALL).title(format!("Top {} flows", cli.top_n)))
-                .widths(&[
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(20),
-                ]);
-
-            f.render_widget(table, size);
+            draw_section(frame, ingress_top_flow_rows, cli.top_n, "Ingress", terminal_section[0]);
+            draw_section(frame, egress_top_flow_rows, cli.top_n, "Egress", terminal_section[1]);
         })?;
 
-        heap.clear();
+        ingress_heap.clear();
+        egress_heap.clear();
         flag = flag ^ 0x1;
     }
 
@@ -84,6 +81,32 @@ async fn main() -> anyhow::Result<()> {
     execute!(std::io::stdout(), LeaveAlternateScreen)?;
     Ok(())
 }
+
+/// Draw each section for ingress and egress.
+fn draw_section<'a>(
+    frame: &mut Frame<'a>,
+    rows: Vec<Row<'a>>,
+    top_n: usize,
+    header_str: &str,
+    section_area: Rect,
+) {
+    let header = Row::new(vec!["SrcIp:Port", "DestIp:Port", "Protocol", "Throughput(Bps)"])
+        .style(Style::default().add_modifier(Modifier::BOLD))
+        .set_style(Style::default().bg(Color::Blue));
+
+    let table = Table::new(rows)
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title(format!("Top {} {} flows", top_n, header_str)))
+        .widths(&[
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+        ]);
+    
+    frame.render_widget(table, section_area);
+}
+
 
 /// Generate rows based on the data on the heap and arguments provided by the user.
 fn generate_row<'a>(
