@@ -6,12 +6,12 @@ use flow_top_talker_common::common_types::FlowKey;
 /// Aggregated flow info.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FlowInfo {
+    pub throughput: u64,
     pub src_addr: u32,
     pub dest_addr: u32,
     pub src_port: u16,
     pub dest_port: u16,
     pub protocol: u8,
-    pub throughput: u64,
 }
 
 impl PartialOrd for FlowInfo {
@@ -26,6 +26,7 @@ impl Ord for FlowInfo {
     }
 }
 
+/// Limited size max heap based on throughput.
 pub struct LimitedMaxHeap {
     top_n: usize,
     heap: BinaryHeap<FlowInfo>,

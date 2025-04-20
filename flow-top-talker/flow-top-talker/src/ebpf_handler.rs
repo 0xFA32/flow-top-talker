@@ -23,6 +23,10 @@ pub struct EbpfHandler {
 }
 
 impl EbpfHandler {
+    /// Init the ebpf handler by loading by the ebpf program and determining number of ncpus
+    /// which would be used later to capture the results.
+    /// 
+    /// Bump the memlock rlimit as recommended by aya.
     pub fn init() -> anyhow::Result<EbpfHandler> {
         // Bump the memlock rlimit. This is needed for older kernels that don't use the
         // new memcg based accounting, see https://lwn.net/Articles/837122/
@@ -56,7 +60,7 @@ impl EbpfHandler {
         return Ok(EbpfHandler { ebpf: ebpf, nr_cpus: nr_cpus.unwrap() });
     }
 
-    /// Add config to the ebpf program.
+    /// Add config provided by the user to the ebpf program.
     pub fn add_config(
         &mut self,
         cli: &Cli
@@ -93,6 +97,8 @@ impl EbpfHandler {
     }
 
     /// Rotate data and add it to the heap provided.
+    /// 
+    /// The flow info is shared between ebpf program and user app via a double buffer.
     pub fn rotate_data(&mut self, heap: &mut LimitedMaxHeap) -> anyhow::Result<()> {
         match self.ebpf.map_mut(FLAG_MAP_NAME) {
             Some(map) => {
@@ -101,11 +107,11 @@ impl EbpfHandler {
 
                 if flag == 0 {
                     let _ = array.set(0, 1, 0);
-                    self.fetch_latest_data( INGRESS_TRACKER_0_MAP_NAME, heap);
-                    self.fetch_latest_data( EGRESS_TRACKER_0_MAP_NAME, heap);
+                    self.fetch_latest_data(INGRESS_TRACKER_0_MAP_NAME, heap);
+                    self.fetch_latest_data(EGRESS_TRACKER_0_MAP_NAME, heap);
                 } else {
                     let _ = array.set(0, 0, 0);
-                    self.fetch_latest_data( INGRESS_TRACKER_1_MAP_NAME, heap);
+                    self.fetch_latest_data(INGRESS_TRACKER_1_MAP_NAME, heap);
                     self.fetch_latest_data(EGRESS_TRACKER_1_MAP_NAME, heap);
                 }
             },
@@ -126,6 +132,7 @@ impl EbpfHandler {
         Ok(())
     }
 
+    /// Fetch latest flow info data from the provided 
     fn fetch_latest_data(
         &mut self,
         map_name: &str, 

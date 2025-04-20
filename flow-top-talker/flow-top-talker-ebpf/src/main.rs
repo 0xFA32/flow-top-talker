@@ -25,7 +25,7 @@ const AF_INET6: u16 = 10;
 
 /// Maintain 2 sets of maps to track the current throughput for ingress and egress.
 /// 
-/// Based on the flag value set choose the appropriate map. This is an easy to way to clear
+/// Based on the flag value choose the appropriate map. This is an easy to way to clear
 /// the map by the user program while the ebpf program continues to track the throughput.
 /// 
 #[map(name = "INGRESS_TRACKER_0")]
@@ -48,31 +48,38 @@ static FLAG: Array<u32> = Array::with_max_entries(1, 0);
 #[map(name = "CONFIG")]
 static CONFIG: HashMap<ConfigKey, u64> = HashMap::with_max_entries(2, 0);
 
-macro_rules! process_kprobe {
-    ($context:expr, $tracker0:expr, $tracker1:expr, $prot:expr) => {
-        if let Some((flow_key, size)) = unwrap_flow_info(&$context, $prot) {
-            let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
-            let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
-
-            let tracker = if flag == 0 {
-                &$tracker0
-            } else {
-                &$tracker1
-            };
-
-            match tracker.get_ptr_mut(&flow_key) {
-                Some(val) => {
-                    unsafe { *val += size as u64; }
-                },
-                None => {
-                    let _ = tracker.insert(&flow_key, &(size as u64), 0);
+macro_rules! process_kprobe_func {
+    ($fn_name:ident, $tracker0:expr, $tracker1:expr, $prot:expr) => {
+        fn $fn_name(ctx: ProbeContext) -> Result<u32, u32> {
+            if let Some((flow_key, size)) = unwrap_flow_info(&ctx, $prot) {
+                let flag_ptr = FLAG.get_ptr_mut(0).ok_or(1u32)?;
+                let flag = unsafe { core::ptr::read_volatile(flag_ptr) };
+    
+                let tracker = if flag == 0 {
+                    &$tracker0
+                } else {
+                    &$tracker1
+                };
+    
+                match tracker.get_ptr_mut(&flow_key) {
+                    Some(val) => {
+                        unsafe { *val += size as u64; }
+                    },
+                    None => {
+                        let _ = tracker.insert(&flow_key, &(size as u64), 0);
+                    }
                 }
             }
+    
+            return Ok(0);
         }
-
-        return Ok(0);
     };
 }
+
+process_kprobe_func!(try_tcp_sendmsg_kprobe, EGRESS_TRACKER_0, EGRESS_TRACKER_1, TCP);
+process_kprobe_func!(try_tcp_recvmsg_kprobe, INGRESS_TRACKER_0, INGRESS_TRACKER_1, TCP);
+process_kprobe_func!(try_udp_sendmsg_kprobe, EGRESS_TRACKER_0, EGRESS_TRACKER_1, UDP);
+process_kprobe_func!(try_udp_recvmsg_kprobe, INGRESS_TRACKER_0, INGRESS_TRACKER_1, UDP);
 
 #[kprobe]
 pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
@@ -80,10 +87,6 @@ pub fn tcp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
         Ok(ret) => ret,
         Err(ret) => ret,
     }
-}
-
-fn try_tcp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1, TCP);
 }
 
 #[kprobe]
@@ -94,10 +97,6 @@ pub fn tcp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
     }
 }
 
-fn try_tcp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1, TCP);
-}
-
 #[kprobe]
 pub fn udp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
     match try_udp_sendmsg_kprobe(ctx) {
@@ -106,20 +105,12 @@ pub fn udp_sendmsg_kprobe(ctx: ProbeContext) -> u32 {
     }
 }
 
-fn try_udp_sendmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, EGRESS_TRACKER_0, EGRESS_TRACKER_1, UDP);
-}
-
 #[kprobe]
 pub fn udp_recvmsg_kprobe(ctx: ProbeContext) -> u32 {
     match try_udp_recvmsg_kprobe(ctx) {
         Ok(ret) => ret,
         Err(ret) => ret,
     }
-}
-
-fn try_udp_recvmsg_kprobe(ctx: ProbeContext) -> Result<u32, u32> {
-    process_kprobe!(ctx, INGRESS_TRACKER_0, INGRESS_TRACKER_1, UDP);
 }
 
 /// Unwrap flow info from TCP/UDP send and recv msg. In all of the APIs the 3rd parameter
@@ -161,7 +152,7 @@ fn unwrap_flow_info(ctx: &ProbeContext, prot: u8) -> Option<(FlowKey, usize)> {
         },
         AF_INET => {
 
-            // Network stores in big endian. Not sure which values in kernel are defined as
+            // Network stores in big endian. Not sure if the values in kernel are defined as
             // big endian or native endian. So converting all of them as it would be no-op 
             // if it is already big endian.
             let src_addr = u32::from_be(unsafe {

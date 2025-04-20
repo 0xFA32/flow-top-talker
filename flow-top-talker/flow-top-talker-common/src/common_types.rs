@@ -13,7 +13,7 @@ pub static UDP: u8 = 1;
 
 /// Struct defining the key for each flow by 5-tuple.
 /// 
-/// Align based on cache line so remaining would be padded automatically.
+/// Align the struct according to the cache line. Rust ensures remaining would be padded automatically.
 /// For now setting it up for x86_64 and aarch64.
 /// https://github.com/crossbeam-rs/crossbeam/blob/983d56b6007ca4c22b56a665a7785f40f55c2a53/crossbeam-utils/src/cache_padded.rs#L80-L88
 #[repr(C)]
@@ -53,11 +53,11 @@ impl FlowKey {
     }
 }
 
-/// Key for the config to pass to ebpf program.
+/// Key for the config to pass to ebpf program which can be used to filter out the data captured from ebpf.
 /// 
 /// This would take 1 byte as it is just 2 values for now and it is fine 
 /// if it is not padded as the use case of this key is minimal,
-///     1. Key is used to setup initial configuration after which user space program
+///     1. Key is used to setup the initial configuration after which user space program
 ///        will not be updating it further.
 ///     2. Ebpf program uses it to filter out the data which if needed we can define a
 ///        PerCpu hash map for it. But considering only 2 values, keeping it simple for

@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Generate rows based on the data on the heap and arguments provided by user.
+/// Generate rows based on the data on the heap and arguments provided by the user.
 fn generate_row<'a>(
     heap: &LimitedMaxHeap,
     dns_cache: &mut LruCache<IpAddr, String>,
