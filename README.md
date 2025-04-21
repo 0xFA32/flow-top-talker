@@ -2,6 +2,8 @@
 
 An eBPF-based tool that displays top-talker flows ranked by throughput.
 
+**Note:** This project was built for learning purposes and is intentionally over-engineered to explore various design ideas.
+
 ## Usage
 
 ```
